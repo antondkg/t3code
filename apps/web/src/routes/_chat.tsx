@@ -1,6 +1,6 @@
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 
-import { ThreadRouteView } from "../components/ThreadRouteView";
+import { ChatPanes } from "../components/ChatPanes";
 import { isAppModalPage } from "../components/sidebar/mainAppLocation";
 import { SidebarInset } from "../components/ui/sidebar";
 import { resolveThreadRouteTarget } from "../threadRoutes";
@@ -17,7 +17,7 @@ function ChatRouteLayout() {
         <ThreadLinkPrompt threadRef={shownTarget.threadRef} />
       ) : null}
       {shownTarget ? (
-        <ThreadRouteView target={shownTarget} background={modalOpen} />
+        <ChatPanes routeTarget={shownTarget} background={modalOpen} />
       ) : modalOpen ? (
         <SidebarInset className="h-dvh" />
       ) : (

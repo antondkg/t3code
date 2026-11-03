@@ -259,6 +259,7 @@ import {
   usePromotingDraftThreadKeys,
 } from "../composerDraftStore";
 import { useShownThreadRouteTarget } from "../hooks/useShownThreadRouteTarget";
+import { useChatPaneCommands } from "../hooks/useChatPaneCommands";
 import {
   SidebarSearchResultRow,
   SortableThreadRow,
@@ -1082,6 +1083,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     routeDraftRedirect,
   );
   const routeThreadKey = routeThreadRef ? scopedThreadKey(routeThreadRef) : null;
+  const { openInSplit } = useChatPaneCommands();
 
   // A selection made under one scope can hold threads the next scope hides.
   // The viewport outlives the scope and does not anchor, so a new list starts at the top.
@@ -2670,6 +2672,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 canShareWithGuestAtom(threadRef.environmentId),
               ),
               canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+              canOpenInSplit: routeTarget !== null && threadKey !== routeThreadKey,
               supports: {
                 settlement: configLoaded,
                 autoSettleOptOut: supportsAutoSettleOptOut,
@@ -2698,6 +2701,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           return;
         }
         switch (clicked.value) {
+          case "open-in-split":
+            if (openInSplit(threadRef) && isMobile) setOpenMobile(false);
+            return;
           case "filter-by-project":
             if (threadProjectGroup) {
               setProjectScopeKeys(
