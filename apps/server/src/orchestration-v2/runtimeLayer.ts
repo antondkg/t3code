@@ -12,6 +12,7 @@ import * as McpAppRequests from "../mcpApps/McpAppRequests.ts";
 import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
+import * as NativeHistoryImporter from "../project/NativeHistoryImporter.ts";
 import * as AgentSessionImporter from "../project/AgentSessionImporter.ts";
 import * as AgentSessionScanner from "../project/AgentSessionScanner.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -235,9 +236,16 @@ const layerOrchestratorProvided = Orchestrator.layer.pipe(
   ),
 );
 
+const layerNativeHistoryImporterProvided = NativeHistoryImporter.layer.pipe(
+  Layer.provide(
+    Layer.mergeAll(layerOrchestratorProvided, layerEventSink, ThreadCommandExecutor.layer),
+  ),
+);
+
 const layerAgentSessionImporterProvided = AgentSessionImporter.layer.pipe(
   Layer.provide(
     Layer.mergeAll(
+      layerNativeHistoryImporterProvided,
       AgentSessionScanner.layer,
       layerProjectService,
       layerOrchestratorProvided,
@@ -255,6 +263,7 @@ const layerThreadManagementProvided = ThreadManagementService.layerWithLegacyImp
     Layer.mergeAll(
       layerOrchestratorProvided,
       layerLegacyV1ThreadImporterProvided,
+      layerNativeHistoryImporterProvided,
       layerCommandReceiptStoreProvided,
       layerProviderSessionManagerProvided,
     ),

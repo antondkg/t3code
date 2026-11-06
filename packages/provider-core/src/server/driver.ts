@@ -1,5 +1,9 @@
 // Context tags are runtime singletons; drivers need multiple instances.
 import type {
+  OrchestrationV2ProviderThread,
+  OrchestrationV2ConversationMessage,
+  OrchestrationV2TurnItem,
+  MessageId,
   ProviderConsumeResetCreditOutcome,
   AcpRegistryListSessionsResult,
   AcpRegistryListProvidersResult,
@@ -52,6 +56,14 @@ export interface ProviderInstance {
   readonly orchestrationAdapter: ProviderAdapter.ProviderAdapterV2["Service"];
   readonly textGeneration: ProviderTextGeneration;
   readonly auth?: ProviderAuthController;
+  /** Explicit bridge to a provider on this environment that owns the native transcript. */
+  readonly nativeHistorySourceInstanceId?: ProviderInstanceId;
+  readonly nativeHistory?: {
+    readonly read: (
+      thread: OrchestrationV2ProviderThread,
+      knownRevision?: string,
+    ) => Effect.Effect<NativeHistorySnapshot | null, ProviderDriverError>;
+  };
   readonly acpSessionManagement?: {
     readonly listSessions: (input: {
       readonly cwd: string;
@@ -75,6 +87,22 @@ export interface ProviderInstance {
       readonly providerId: string;
     }) => Effect.Effect<void, AcpRegistryOperationError>;
   };
+}
+
+export interface NativeHistorySnapshot {
+  readonly sourceRevision: string;
+  readonly turns: ReadonlyArray<{
+    readonly nativeTurnId: string;
+    readonly messages: ReadonlyArray<OrchestrationV2ConversationMessage>;
+    readonly turnItems: ReadonlyArray<OrchestrationV2TurnItem>;
+  }>;
+  readonly attachments: ReadonlyArray<{
+    readonly messageId: MessageId;
+    readonly index: number;
+    readonly name: string;
+    readonly mimeType: string;
+    readonly data: string;
+  }>;
 }
 
 export interface ProviderContinuationIdentity {

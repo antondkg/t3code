@@ -5321,6 +5321,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               Equal.equals(update.content, context.outgoingPrompt)
             ) {
               context.consumedPromptMessageId = update.messageId;
+              context.nativePromptId ??= update.messageId;
             }
             if (
               context.consumedPromptMessageId !== undefined &&

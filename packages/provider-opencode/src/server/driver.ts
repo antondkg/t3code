@@ -44,6 +44,7 @@ import {
   type ProbedOpenCode,
 } from "./versionProbe.ts";
 import * as OpenCodeServerOwner from "./OpenCodeServerOwner.ts";
+import { readNativeHistory } from "./v2/nativeHistory.ts";
 import * as OpenCode2Client from "./v2/OpenCode2Client.ts";
 import * as OpenCode2Server from "./v2/OpenCode2Server.ts";
 import {
@@ -544,6 +545,22 @@ export const OpenCodeDriver: ProviderDriver<
                 ),
               ),
             }),
+      nativeHistory: {
+        read: (thread, knownRevision) =>
+          openCode2Server
+            .withConnection((connection) => readNativeHistory(connection, thread, knownRevision))
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ProviderDriverError({
+                    driver: DRIVER_KIND,
+                    instanceId,
+                    detail: "Could not read native OpenCode history",
+                    cause,
+                  }),
+              ),
+            ),
+      },
       orchestrationAdapter,
       textGeneration,
     } satisfies ProviderInstance;

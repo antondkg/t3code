@@ -368,14 +368,23 @@ const layerBase: Layer.Layer<
       return Effect.forEach(
         events,
         (event): Effect.Effect<OrchestrationV2DomainEvent, unknown> =>
-          event.type === "turn-item.updated"
-            ? turnItemPositions
-                .normalize(
-                  event.payload,
-                  event.payload.runId === null ? undefined : runOrdinals.get(event.payload.runId),
-                )
-                .pipe(Effect.map((payload) => ({ ...event, payload })))
-            : Effect.succeed(event),
+          Effect.gen(function* () {
+            if (event.type === "transcript.items-removed") {
+              yield* turnItemPositions.reconcileImported({
+                threadId: event.threadId,
+                removed: event.payload.turnItemIds,
+                positions: event.payload.positions ?? [],
+              });
+            }
+            if (event.type === "turn-item.updated") {
+              const payload = yield* turnItemPositions.normalize(
+                event.payload,
+                event.payload.runId === null ? undefined : runOrdinals.get(event.payload.runId),
+              );
+              return { ...event, payload };
+            }
+            return event;
+          }),
         { concurrency: 1 },
       );
     };
