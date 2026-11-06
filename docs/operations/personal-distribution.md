@@ -8,7 +8,7 @@ runtime checksum. Production data and machine configuration never belong in this
 
 Install the upstream prerequisites, the manifest's Rust toolchain with `rustup toolchain install`,
 and run `vp i --frozen-lockfile`. The helper selects the repository's exact Node version through
-`vp env exec` without changing system defaults. Build from a committed
+the Vite+ managed runtime directory, validates it, and leaves system defaults unchanged. Build from a committed
 checkout, using the same commit on both hosts:
 
 ```sh
