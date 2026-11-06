@@ -84,6 +84,15 @@ ENV = dict(os.environ)
 vp = ENV.get("T3_PERSONAL_VP") or shutil.which("vp") or str(
     Path.home() / ".t3/build-tools/vite-plus/bin/vp")
 ENV["PATH"] = str(Path(vp).resolve().parent) + os.pathsep + ENV.get("PATH", "")
+node_version = json.loads((ROOT / "package.json").read_text())["engines"]["node"]
+node = subprocess.check_output(
+    [vp, "env", "exec", "--node", node_version, "node", "-p", "process.execPath"],
+    cwd=ROOT, env=ENV, text=True).strip()
+if not Path(node).is_file():
+    raise SystemExit(f"Cannot resolve the pinned Node {node_version}")
+ENV["PATH"] = str(Path(node).parent) + os.pathsep + ENV["PATH"]
+if args.target == "desktop":
+    ENV["RUSTUP_TOOLCHAIN"] = RELEASE["rustToolchain"]
 # These are public vendor settings, not credentials; private overrides stay in ignored env files.
 for line in (ROOT / ".env.example").read_text().splitlines():
     key, separator, value = line.partition("=")
