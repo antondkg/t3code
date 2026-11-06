@@ -144,6 +144,7 @@ const make = Effect.gen(function* () {
               turns,
               attachments: snapshot.attachments,
               sourceRevision: snapshot.sourceRevision,
+              modelSelection: snapshot.modelSelection,
             }),
           )
           .digest("hex");
@@ -214,7 +215,17 @@ const make = Effect.gen(function* () {
             const currentProviderThread = current.providerThreads.find(
               (thread) => thread.id === providerThread.id,
             );
-            if (currentProviderThread === undefined) return 0;
+            if (
+              currentProviderThread === undefined ||
+              current.thread.activeProviderThreadId !== providerThread.id ||
+              current.thread.providerInstanceId !== records.thread.providerInstanceId
+            )
+              return 0;
+            if (
+              (yield* registry.getInstance(instance.instanceId)) !== instance ||
+              (yield* registry.getInstance(source.instanceId)) !== source
+            )
+              return 0;
             const desiredMessages = messages.map((message) => ({
               ...message,
               attachments: byMessage.get(message.id) ?? [],
@@ -317,6 +328,11 @@ const make = Effect.gen(function* () {
               payload: {
                 ...current.thread,
                 historyOrigin: "v1_import",
+                // Reflect the existing native model; this is hydration, not a provider switch.
+                ...(current.thread.modelSelection.model === "default" &&
+                snapshot.modelSelection !== undefined
+                  ? { modelSelection: snapshot.modelSelection }
+                  : {}),
                 ...(current.runs.length === 0
                   ? { settledOverride: "settled", settledAt: at, unsettledAt: null }
                   : {}),
