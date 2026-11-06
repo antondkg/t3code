@@ -64,6 +64,7 @@ import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import { DispatchModeLimit, exceededDispatchModeLimit } from "./DispatchModeLimit.ts";
 import { projectTurnItemForDetail } from "./WireProjection.ts";
+import * as NativeHistoryImporter from "../project/NativeHistoryImporter.ts";
 import * as LegacyV1ThreadImporter from "./legacy/LegacyV1ThreadImporter.ts";
 import * as ServerSettings from "../serverSettings.ts";
 
@@ -573,6 +574,7 @@ const make = Effect.gen(function* () {
   const sessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
   const layerScope = yield* Effect.scope;
   const agentScope = yield* AgentScope;
+  const nativeHistory = yield* Effect.serviceOption(NativeHistoryImporter.NativeHistoryImporter);
   const legacyImporter = yield* LegacyV1ThreadImporter.LegacyV1ThreadImporter;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const receipts = yield* CommandReceiptStore.CommandReceiptStoreV2;
@@ -628,6 +630,17 @@ const make = Effect.gen(function* () {
 
   const ensureProjectionTranscript = (threadId: ThreadId) =>
     ensureLegacyTranscript(threadId).pipe(
+      Effect.tap(() =>
+        Option.isSome(nativeHistory)
+          ? nativeHistory.value
+              .refresh(threadId)
+              .pipe(
+                Effect.catch((cause) =>
+                  Effect.logWarning("Could not refresh native transcript", { threadId, cause }),
+                ),
+              )
+          : Effect.void,
+      ),
       Effect.mapError(
         (cause) =>
           new Orchestrator.OrchestratorProjectionError({

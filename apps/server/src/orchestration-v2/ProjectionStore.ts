@@ -84,6 +84,11 @@ import {
   deriveBlockedOnThreadWait,
   derivePendingBackgroundWork,
 } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import {
+  importedHistoryOrdinalBoundary,
+  RUN_ITEM_POSITION_STRIDE,
+  IMPORTED_ITEM_POSITION_OFFSET,
+} from "./TurnItemPositionStore.ts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -930,6 +935,15 @@ export function applyToProjection(
         ...base,
         runtimeRequests: upsertById(base.runtimeRequests, event.payload),
       };
+    case "transcript.items-removed": {
+      const messages = new Set(event.payload.messageIds);
+      const items = new Set(event.payload.turnItemIds);
+      return withLocalVisibleTurnItems({
+        ...base,
+        messages: base.messages.filter((item) => item.runId !== null || !messages.has(item.id)),
+        turnItems: base.turnItems.filter((item) => item.runId !== null || !items.has(item.id)),
+      });
+    }
     case "message.updated":
       return {
         ...base,
@@ -1346,11 +1360,15 @@ function makeForkMarkerTurnItem(input: {
 function isTurnItemAtOrBeforeRun(input: {
   readonly historyOrigin: OrchestrationV2ThreadProjection["thread"]["historyOrigin"];
   readonly itemRunId: OrchestrationV2TurnItem["runId"];
+  readonly itemOrdinal: number;
   readonly runOrdinalById: ReadonlyMap<NonNullable<OrchestrationV2TurnItem["runId"]>, number>;
   readonly sourceRunOrdinal: number;
 }): boolean {
   if (input.itemRunId === null) {
-    return input.historyOrigin === "v1_import";
+    return (
+      input.historyOrigin === "v1_import" &&
+      input.itemOrdinal < importedHistoryOrdinalBoundary(input.sourceRunOrdinal)
+    );
   }
   const ordinal = input.runOrdinalById.get(input.itemRunId);
   return ordinal !== undefined && ordinal <= input.sourceRunOrdinal;
@@ -1390,6 +1408,7 @@ function visibleTurnItemsThroughRun(input: {
       return isTurnItemAtOrBeforeRun({
         historyOrigin: input.sourceProjection.thread.historyOrigin,
         itemRunId: item.runId,
+        itemOrdinal: item.ordinal,
         runOrdinalById,
         sourceRunOrdinal: sourceRun.ordinal,
       });
@@ -2495,6 +2514,15 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             `;
               break;
             }
+            case "transcript.items-removed": {
+              for (const id of event.payload.messageIds) {
+                yield* sql`DELETE FROM orchestration_v2_projection_messages WHERE thread_id = ${event.threadId} AND message_id = ${id} AND run_id IS NULL`;
+              }
+              for (const id of event.payload.turnItemIds) {
+                yield* sql`DELETE FROM orchestration_v2_projection_turn_items WHERE thread_id = ${event.threadId} AND turn_item_id = ${id} AND run_id IS NULL`;
+              }
+              break;
+            }
             case "message.updated": {
               const payloadJson = yield* encodeMessagePayload(event.payload);
               const createdAt = yield* encodePayloadTimestamp(event.payload.createdAt);
@@ -2876,6 +2904,12 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                           FROM orchestration_v2_projection_threads AS source_thread
                           WHERE source_thread.thread_id = item.thread_id
                             AND json_extract(source_thread.payload_json, '$.historyOrigin') = 'v1_import'
+                        )
+                        AND item.ordinal < (
+                          SELECT required_run.ordinal * ${RUN_ITEM_POSITION_STRIDE} + ${IMPORTED_ITEM_POSITION_OFFSET}
+                          FROM orchestration_v2_projection_runs AS required_run
+                          WHERE required_run.thread_id = item.thread_id AND required_run.run_id = ${window.requiredRunId ?? null}
+                          LIMIT 1
                         )
                       )
                       OR run.ordinal <= (
@@ -5717,6 +5751,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 isTurnItemAtOrBeforeRun({
                   historyOrigin: source.records.thread.historyOrigin,
                   itemRunId: row.item.runId,
+                  itemOrdinal: row.item.ordinal,
                   runOrdinalById: ordinals,
                   sourceRunOrdinal: sourceRun.ordinal,
                 }),

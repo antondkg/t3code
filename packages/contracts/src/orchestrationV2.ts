@@ -1042,6 +1042,8 @@ export const OrchestrationV2ProviderThreadNativeMetadata = Schema.Struct({
   title: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   updatedAt: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   itemIdentityVersion: Schema.optional(Schema.Literal(2)),
+  historyRevision: Schema.optional(TrimmedNonEmptyString),
+  historySourceRevision: Schema.optional(TrimmedNonEmptyString),
   forkHeadMessageId: Schema.optional(TrimmedNonEmptyString),
   claudeAttachmentBudget: Schema.optional(
     Schema.Struct({ bytesUsed: NonNegativeInt, pagesUsed: NonNegativeInt }),
@@ -1962,6 +1964,17 @@ export const OrchestrationV2DomainEvent = Schema.Union([
   }),
   Schema.Struct({
     ...OrchestrationV2EventBase.fields,
+    type: Schema.Literal("transcript.items-removed"),
+    payload: Schema.Struct({
+      messageIds: Schema.Array(MessageId),
+      turnItemIds: Schema.Array(TurnItemId),
+      positions: Schema.optional(
+        Schema.Array(Schema.Struct({ id: TurnItemId, ordinal: NonNegativeInt })),
+      ),
+    }),
+  }),
+  Schema.Struct({
+    ...OrchestrationV2EventBase.fields,
     type: Schema.Literal("message.updated"),
     payload: OrchestrationV2ConversationMessage,
   }),
@@ -2843,6 +2856,17 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
     ...OrchestrationV2JsonEventBaseFields,
     type: Schema.Literal("runtime-request.updated"),
     payload: OrchestrationV2RuntimeRequestJson,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2JsonEventBaseFields,
+    type: Schema.Literal("transcript.items-removed"),
+    payload: Schema.Struct({
+      messageIds: Schema.Array(MessageId),
+      turnItemIds: Schema.Array(TurnItemId),
+      positions: Schema.optional(
+        Schema.Array(Schema.Struct({ id: TurnItemId, ordinal: NonNegativeInt })),
+      ),
+    }),
   }),
   Schema.Struct({
     ...OrchestrationV2JsonEventBaseFields,

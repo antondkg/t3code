@@ -1649,7 +1649,7 @@ export const layerWsRpc = (
                 historyOrigin: existing.historyOrigin,
                 hasRun: existing.latestRunId !== null,
               });
-              yield* agentSessionImporter
+              const importedMessages = yield* agentSessionImporter
                 .importNativeHistory({ threadId, workspaceRoot: project.workspaceRoot })
                 .pipe(
                   Effect.mapError(
@@ -1661,7 +1661,7 @@ export const layerWsRpc = (
                       }),
                   ),
                 );
-              return { threadId, imported: repairing } as const;
+              return { threadId, imported: repairing || importedMessages > 0 } as const;
             }
 
             const commandId = CommandId.make(yield* random.uuidV4());

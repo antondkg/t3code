@@ -5,6 +5,12 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
+export const RUN_ITEM_POSITION_STRIDE = 1_000_000;
+export const IMPORTED_ITEM_POSITION_OFFSET = RUN_ITEM_POSITION_STRIDE / 2;
+export function importedHistoryOrdinalBoundary(runOrdinal: number): number {
+  return runOrdinal * RUN_ITEM_POSITION_STRIDE + IMPORTED_ITEM_POSITION_OFFSET;
+}
+
 export class TurnItemPositionStoreError extends Schema.TaggedError<TurnItemPositionStoreError>()(
   "TurnItemPositionStoreError",
   {
@@ -23,6 +29,11 @@ export interface TurnItemPositionStoreV2Shape {
     readonly runId: RunId | null;
     readonly runOrdinal?: number;
   }) => Effect.Effect<number, TurnItemPositionStoreError>;
+  readonly reconcileImported: (input: {
+    readonly threadId: ThreadId;
+    readonly removed: ReadonlyArray<TurnItemId>;
+    readonly positions: ReadonlyArray<{ readonly id: TurnItemId; readonly ordinal: number }>;
+  }) => Effect.Effect<void, TurnItemPositionStoreError>;
   readonly normalize: (
     item: OrchestrationV2TurnItem,
     runOrdinal?: number,
@@ -61,8 +72,8 @@ export const layer: Layer.Layer<TurnItemPositionStoreV2, never, SqlClient.SqlCli
                 LIMIT 1
               `;
           const runOrdinal = suppliedRunOrdinal ?? runRows[0]?.ordinal ?? null;
-          const lowerBound = runOrdinal === null ? 0 : runOrdinal * 1_000_000;
-          const upperBound = runOrdinal === null ? 999_999 : lowerBound + 999_999;
+          const lowerBound = runOrdinal === null ? 0 : runOrdinal * RUN_ITEM_POSITION_STRIDE;
+          const upperBound = lowerBound + RUN_ITEM_POSITION_STRIDE - 1;
           yield* sql`
           INSERT INTO orchestration_v2_turn_item_positions (thread_id, turn_item_id, ordinal)
           SELECT
@@ -103,6 +114,27 @@ export const layer: Layer.Layer<TurnItemPositionStoreV2, never, SqlClient.SqlCli
 
     return TurnItemPositionStoreV2.of({
       allocate,
+      reconcileImported: Effect.fn("TurnItemPositionStore.reconcileImported")(
+        function* (input) {
+          for (const id of input.removed) {
+            yield* sql`DELETE FROM orchestration_v2_turn_item_positions WHERE thread_id = ${input.threadId} AND turn_item_id = ${id} AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_turn_items WHERE thread_id = ${input.threadId} AND turn_item_id = ${id} AND run_id IS NOT NULL)`;
+          }
+          for (const item of input.positions) {
+            yield* sql`INSERT INTO orchestration_v2_turn_item_positions (thread_id, turn_item_id, ordinal) VALUES (${input.threadId}, ${item.id}, ${item.ordinal}) ON CONFLICT(thread_id, turn_item_id) DO UPDATE SET ordinal = excluded.ordinal`;
+          }
+        },
+        (effect, input) =>
+          effect.pipe(
+            Effect.mapError(
+              (cause) =>
+                new TurnItemPositionStoreError({
+                  threadId: input.threadId,
+                  turnItemId: input.positions[0]?.id ?? TurnItemId.make("native-history"),
+                  cause,
+                }),
+            ),
+          ),
+      ),
       // Per-event normalization shares the enclosing orchestration span.
       normalize: Effect.fnUntraced(function* (item, runOrdinal) {
         return yield* allocate({

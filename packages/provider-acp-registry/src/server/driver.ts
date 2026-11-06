@@ -1,6 +1,7 @@
 import {
   officialAcpRegistryIconUrlForAgentId,
   ProviderDriverKind,
+  ProviderInstanceId,
   resolveOfficialAcpRegistryIconUrl,
   TextGenerationError,
   type AcpRegistryOperationError,
@@ -821,6 +822,13 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
         ...snapshot,
         refresh: snapshot.refresh.pipe(Effect.tap(() => controller.refreshMethods ?? Effect.void)),
       },
+      ...(effectiveConfig.nativeHistorySourceInstanceId === ""
+        ? {}
+        : {
+            nativeHistorySourceInstanceId: ProviderInstanceId.make(
+              effectiveConfig.nativeHistorySourceInstanceId,
+            ),
+          }),
       orchestrationAdapter,
       textGeneration: makeUnsupportedTextGeneration(),
       acpSessionManagement: {
