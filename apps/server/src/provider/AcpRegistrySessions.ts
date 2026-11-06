@@ -25,7 +25,6 @@ import * as AgentSessionImporter from "../project/AgentSessionImporter.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ServerRuntimeStartup from "../serverRuntimeStartup.ts";
 import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
-import * as ProviderRegistry from "./ProviderRegistry.ts";
 
 export const importedThreadId = (input: {
   readonly driver: ProviderDriverKind;
@@ -67,7 +66,6 @@ export class AcpRegistrySessions extends Context.Service<
 const make = Effect.gen(function* () {
   const projectService = yield* ProjectService.ProjectService;
   const providerInstances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
-  const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
   const coordinator = yield* AcpRegistryRuntimeCoordinator.AcpRegistryRuntimeCoordinator;
   const threadManagement = yield* ThreadManagementService.ThreadManagementService;
   const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
@@ -198,13 +196,6 @@ const make = Effect.gen(function* () {
       return { threadId, imported: repairing } as const;
     }
 
-    const provider = (yield* providerRegistry.getProviders).find(
-      (candidate) => candidate.instanceId === input.instanceId,
-    );
-    const model =
-      provider?.models.find((candidate) => candidate.isDefault)?.slug ??
-      provider?.models[0]?.slug ??
-      "default";
     const commandId = CommandId.make(yield* random.uuidV4());
     const launched = yield* Effect.result(
       startup.enqueueCommand(
@@ -213,7 +204,8 @@ const make = Effect.gen(function* () {
           threadId,
           projectId: input.projectId,
           title: input.title ?? "Imported ACP session",
-          modelSelection: { instanceId: input.instanceId, model },
+          // A loaded native session owns its model; catalog defaults are for new sessions.
+          modelSelection: { instanceId: input.instanceId, model: "default" },
           runtimeMode: "approval-required",
           interactionMode: "default",
           workspaceStrategy: { type: "root" },

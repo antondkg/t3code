@@ -1,5 +1,5 @@
 {
-  "version": "0.1.7-personal.1",
+  "version": "0.1.7-personal.2",
   "repository": "antondkg/t3code",
   "rustToolchain": "1.95.0",
   "upstreamTag": "v0.1.7",
@@ -11,5 +11,6 @@
       "retireWhen": "An upstream release includes native ACP history import and its cleanup and replay fixes."
     }
   ],
-  "linuxRuntimeSha256": "c089892bf7922e2e73c6f44a5d1ea125c99f70e378c18361cbbed2fba1920e6c"
+  "linuxRuntimeSha256": "c089892bf7922e2e73c6f44a5d1ea125c99f70e378c18361cbbed2fba1920e6c",
+  "nativeSessionModelPolicy": "Retain the model selected in each existing native ACP session."
 }

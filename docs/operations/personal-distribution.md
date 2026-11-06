@@ -1,6 +1,8 @@
 # Personal distribution
 
 The `codex/personal` branch carries the ACP history fix and distribution configuration.
+Native imports use the agent-owned model instead of applying its new-session catalog default.
+Retire this follow-up when upstream preserves model selection while importing and continuing native sessions.
 `scripts/personal/release.json` pins the upstream tag, source commit, PR head, version and Linux
 runtime checksum. Production data and machine configuration never belong in this repository.
 
