@@ -4,6 +4,7 @@ import type {
   OrchestrationV2ConversationMessage,
   OrchestrationV2TurnItem,
   MessageId,
+  ModelSelection,
   ProviderConsumeResetCreditOutcome,
   AcpRegistryListSessionsResult,
   AcpRegistryListProvidersResult,
@@ -91,6 +92,7 @@ export interface ProviderInstance {
 
 export interface NativeHistorySnapshot {
   readonly sourceRevision: string;
+  readonly modelSelection?: ModelSelection;
   readonly turns: ReadonlyArray<{
     readonly nativeTurnId: string;
     readonly nativeMessageIds: ReadonlyArray<string>;
