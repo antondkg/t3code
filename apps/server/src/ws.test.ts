@@ -1724,6 +1724,7 @@ it.effect("ACP session RPCs list a thread missing its history and repair it on i
     const failing = yield* seedAcpThread("failing", { imported: false, ran: false });
     const timingOut = yield* seedAcpThread("timing-out", { imported: false, ran: false });
     const repaired: Array<ThreadId> = [];
+    const launches: Array<ThreadLaunchService.ThreadLaunchInput> = [];
     const session = (sessionId: string) => ({
       sessionId,
       cwd: "/workspace/acp",
@@ -1787,8 +1788,24 @@ it.effect("ACP session RPCs list a thread missing its history and repair it on i
               ),
             ),
       }),
-      // Repairing an existing thread must not launch another one.
-      Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
+      Layer.mock(ServerRuntimeStartup.ServerRuntimeStartup)({
+        enqueueCommand: (effect) => effect,
+      }),
+      Layer.mock(ThreadLaunchService.ThreadLaunchService)({
+        launch: (input) =>
+          Effect.sync(() => launches.push(input)).pipe(
+            Effect.andThen(
+              Effect.fail(
+                new ThreadLaunchService.ThreadLaunchError({
+                  operation: "create-thread",
+                  commandId: input.commandId,
+                  projectId: input.projectId,
+                  cause: "Stop after recording the native session launch.",
+                }),
+              ),
+            ),
+          ),
+      }),
       Layer.mock(AgentSessionImporter.AgentSessionImporter)({
         importNativeHistory: ({ threadId }) =>
           threadId === failing
@@ -1846,6 +1863,15 @@ it.effect("ACP session RPCs list a thread missing its history and repair it on i
       });
     assert.deepEqual(yield* importSession("pending"), { threadId: pending, imported: true });
     assert.deepEqual(repaired, [pending]);
+    assert.equal(launches.length, 0);
+    const newImport = yield* importSession("new").pipe(Effect.flip);
+    assert.equal(newImport._tag, "AcpRegistryOperationError");
+    assert.equal(launches.length, 1);
+    assert.deepEqual(launches[0]?.modelSelection, {
+      instanceId: acpInstanceId,
+      model: "default",
+    });
+    assert.equal(launches[0]?.importedNativeThread?.ref.nativeId, "new");
     for (const sessionId of ["failing", "timing-out"]) {
       const failure = yield* importSession(sessionId).pipe(Effect.flip);
       assert.equal(failure._tag, "AcpRegistryOperationError");

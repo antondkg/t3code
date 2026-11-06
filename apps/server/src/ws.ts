@@ -1706,13 +1706,6 @@ export const layerWsRpc = (
               return { threadId, imported: repairing } as const;
             }
 
-            const provider = (yield* providerRegistry.getProviders).find(
-              (candidate) => candidate.instanceId === input.instanceId,
-            );
-            const model =
-              provider?.models.find((candidate) => candidate.isDefault)?.slug ??
-              provider?.models[0]?.slug ??
-              "default";
             const commandId = CommandId.make(yield* random.uuidV4());
             const launched = yield* Effect.result(
               startup.enqueueCommand(
@@ -1721,7 +1714,8 @@ export const layerWsRpc = (
                   threadId,
                   projectId: input.projectId,
                   title: input.title ?? "Imported ACP session",
-                  modelSelection: { instanceId: input.instanceId, model },
+                  // A loaded native session owns its model; catalog defaults are for new sessions.
+                  modelSelection: { instanceId: input.instanceId, model: "default" },
                   runtimeMode: "approval-required",
                   interactionMode: "default",
                   workspaceStrategy: { type: "root" },
