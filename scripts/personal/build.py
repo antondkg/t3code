@@ -85,12 +85,15 @@ vp = ENV.get("T3_PERSONAL_VP") or shutil.which("vp") or str(
     Path.home() / ".t3/build-tools/vite-plus/bin/vp")
 ENV["PATH"] = str(Path(vp).resolve().parent) + os.pathsep + ENV.get("PATH", "")
 node_version = json.loads((ROOT / "package.json").read_text())["engines"]["node"]
-node = subprocess.check_output(
-    [vp, "env", "exec", "--node", node_version, "node", "-p", "process.execPath"],
-    cwd=ROOT, env=ENV, text=True).strip()
-if not Path(node).is_file():
-    raise SystemExit(f"Cannot resolve the pinned Node {node_version}")
-ENV["PATH"] = str(Path(node).parent) + os.pathsep + ENV["PATH"]
+run("vp", "env", "install", node_version)
+vp_home = Path(ENV.get("VP_HOME", str(Path(vp).resolve().parents[1])))
+node = vp_home / "js_runtime/node" / node_version / "bin/node"
+if not node.is_file():
+    raise SystemExit(f"Cannot find the managed Node {node_version} in {vp_home}")
+actual_version = subprocess.check_output([str(node), "--version"], text=True).strip()
+if actual_version != f"v{node_version}":
+    raise SystemExit(f"Expected Node {node_version}, found {actual_version}")
+ENV["PATH"] = str(node.parent) + os.pathsep + ENV["PATH"]
 if args.target == "desktop":
     ENV["RUSTUP_TOOLCHAIN"] = RELEASE["rustToolchain"]
 # These are public vendor settings, not credentials; private overrides stay in ignored env files.
