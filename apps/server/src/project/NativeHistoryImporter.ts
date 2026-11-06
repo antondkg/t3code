@@ -329,7 +329,8 @@ const make = Effect.gen(function* () {
                 ...current.thread,
                 historyOrigin: "v1_import",
                 // Reflect the existing native model; this is hydration, not a provider switch.
-                ...(current.thread.modelSelection.model === "default" &&
+                ...((current.runs.length === 0 ||
+                  current.thread.modelSelection.model === "default") &&
                 snapshot.modelSelection !== undefined
                   ? { modelSelection: snapshot.modelSelection }
                   : {}),
