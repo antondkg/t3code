@@ -2330,6 +2330,7 @@ it.effect("ACP session RPCs list a thread missing its history and repair it on i
     const complete = yield* seedAcpThread("complete", { imported: true, ran: false });
     const ran = yield* seedAcpThread("ran", { imported: false, ran: true });
     const repaired: Array<ThreadId> = [];
+    const launches: Array<ThreadLaunchService.ThreadLaunchInput> = [];
     const session = (sessionId: string) => ({
       sessionId,
       cwd: "/workspace/acp",
@@ -2393,8 +2394,24 @@ it.effect("ACP session RPCs list a thread missing its history and repair it on i
               ),
             ),
       }),
-      // Repairing an existing thread must not launch another one.
-      Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
+      Layer.mock(ServerRuntimeStartup.ServerRuntimeStartup)({
+        enqueueCommand: (effect) => effect,
+      }),
+      Layer.mock(ThreadLaunchService.ThreadLaunchService)({
+        launch: (input) =>
+          Effect.sync(() => launches.push(input)).pipe(
+            Effect.andThen(
+              Effect.fail(
+                new ThreadLaunchService.ThreadLaunchError({
+                  operation: "create-thread",
+                  commandId: input.commandId,
+                  projectId: input.projectId,
+                  cause: "Stop after recording the native session launch.",
+                }),
+              ),
+            ),
+          ),
+      }),
       Layer.mock(AgentSessionImporter.AgentSessionImporter)({
         importNativeHistory: ({ threadId }) =>
           Effect.sync(() => repaired.push(threadId)).pipe(Effect.as(1)),
@@ -2448,6 +2465,17 @@ it.effect("ACP session RPCs list a thread missing its history and repair it on i
     });
     assert.deepEqual(imported, { threadId: pending, imported: true });
     assert.deepEqual(repaired, [pending]);
+    // Repairing an existing thread must not launch another one.
+    assert.equal(launches.length, 0);
+    const newImport = yield* client[WS_METHODS.serverImportAcpRegistrySession]({
+      instanceId: acpInstanceId,
+      projectId: acpProjectId,
+      sessionId: "new",
+    }).pipe(Effect.flip);
+    assert.equal(newImport._tag, "AcpRegistryOperationError");
+    // A loaded native session keeps its own model rather than the catalog default.
+    assert.deepEqual(launches[0]?.modelSelection, { instanceId: acpInstanceId, model: "default" });
+    assert.equal(launches[0]?.importedNativeThread?.ref.nativeId, "new");
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
