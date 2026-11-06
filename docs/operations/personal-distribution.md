@@ -6,7 +6,9 @@ runtime checksum. Production data and machine configuration never belong in this
 
 ## Build
 
-Install the upstream prerequisites and run `vp i --frozen-lockfile`. Build from a committed
+Install the upstream prerequisites, the manifest's Rust toolchain with `rustup toolchain install`,
+and run `vp i --frozen-lockfile`. The helper selects the repository's exact Node version through
+`vp env exec` without changing system defaults. Build from a committed
 checkout, using the same commit on both hosts:
 
 ```sh

@@ -1,6 +1,7 @@
 {
   "version": "0.1.7-personal.1",
   "repository": "antondkg/t3code",
+  "rustToolchain": "1.95.0",
   "upstreamTag": "v0.1.7",
   "upstreamCommit": "322f6544dfad0a3c8a0c8cbecf2c7f7874b14268",
   "patches": [
