@@ -31,6 +31,22 @@ The native session itself is never opened, closed, prompted or modified for a hi
 Retire this bridge when upstream's ACP history API exposes equivalent structured records and
 native identity, with tested refresh and preservation semantics.
 
+## Upgrade this Mac
+
+```sh
+python3 scripts/personal/upgrade.py --remote vallor-dev
+```
+
+The command rebases the patches onto the newest nightly tag (or `--tag`), bumps the personal
+version in one commit at the branch tip, runs `check:changed`, and builds the Mac app. With
+`--remote`, it pushes the branch, builds the matching Linux runtime in that host's checkout and
+installs it under `~/.t3/runtime/versions/`, so the SSH connection never downloads a release. The
+Mac app is signed with the first `Developer ID Application` identity in the keychain
+(`T3_PERSONAL_SIGN_IDENTITY` overrides; empty keeps ad-hoc) so 1Password's Add Browser accepts it,
+then swapped in when T3 quits, and reopens; the previous app and a SQLite-API copy of
+`~/.t3/userdata` stay in `~/.t3/personal-backups/` (last three). On a rebase conflict, resolve it,
+run `git rebase --continue`, and rerun the command. Publishing a release stays optional.
+
 ## Build
 
 Install the upstream prerequisites, the manifest's Rust toolchain with `rustup toolchain install`,
