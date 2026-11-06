@@ -151,6 +151,14 @@ export default defineConfig({
       entry: ["src/preview-pip-preload.ts"],
     },
     {
+      format: "cjs",
+      outDir: "dist-electron",
+      dts: false,
+      sourcemap: true,
+      outExtensions: () => ({ js: ".cjs" }),
+      entry: ["src/preview-extension-preload.ts"],
+    },
+    {
       // Sandboxed preloads must be self-contained, without shared runtime chunks.
       format: "cjs",
       outDir: "dist-electron",

@@ -1,0 +1,162 @@
+diff --git a/dist/cjs/index.js b/dist/cjs/index.js
+index a91ca8f..4d40172 100644
+--- a/dist/cjs/index.js
++++ b/dist/cjs/index.js
+@@ -1849,14 +1849,44 @@ var NativeMessagingHost = class {
+     this.receiveExtensionMessage = (_event, message) => {
+       this.send(message);
+     };
++    // A pipe read can hold part of a message or several; frame them from a buffer.
++    this.receiveBuffer = Buffer.alloc(0);
++    // Messages sent before the host process starts. Something in the app has overwritten a
++    // `pending` field with a non-array, so the queue lives apart and writes to `pending` are logged.
++    this.queuedMessages = [];
++    let pendingValue;
++    Object.defineProperty(this, "pending", {
++      get: () => pendingValue,
++      set: (value) => {
++        pendingValue = value;
++        try {
++          globalThis.process.getBuiltinModule("node:fs").appendFileSync(
++            `${globalThis.process.env.HOME}/.t3/userdata/logs/native-messaging-pending.log`,
++            `${new Date().toISOString()} pending set to ${Object.prototype.toString.call(value)}\n${new Error().stack}\n\n`
++          );
++        } catch {}
++      }
++    });
+     this.receive = (data) => {
+-      const length = data.readUInt32LE(0);
+-      const message = JSON.parse(data.subarray(4, 4 + length).toString());
+-      d7("receive: %s", message);
+-      if (this.keepAlive && this.sender) {
+-        this.sender.send(`crx-native-msg-${this.connectionId}`, message);
+-      } else {
+-        this.resolveResponse?.(message);
++      this.receiveBuffer = this.receiveBuffer.length === 0 ? data : Buffer.concat([this.receiveBuffer, data]);
++      while (this.receiveBuffer.length >= 4) {
++        const length = this.receiveBuffer.readUInt32LE(0);
++        if (this.receiveBuffer.length < 4 + length) return;
++        const body = this.receiveBuffer.subarray(4, 4 + length);
++        this.receiveBuffer = this.receiveBuffer.subarray(4 + length);
++        let message;
++        try {
++          message = JSON.parse(body.toString());
++        } catch (error) {
++          d7("receive: dropped an unreadable message", error);
++          continue;
++        }
++        d7("receive: %s", message);
++        if (this.keepAlive && this.sender) {
++          this.sender.send(`crx-native-msg-${this.connectionId}`, message);
++        } else {
++          this.resolveResponse?.(message);
++        }
+       }
+     };
+     this.keepAlive = keepAlive;
+@@ -1920,17 +1950,18 @@ var NativeMessagingHost = class {
+       this.destroy();
+     });
+     this.connected = true;
+-    if (this.pending && this.pending.length > 0) {
+-      d7("sending %d pending messages", this.pending.length);
+-      this.pending.forEach((msg) => this.send(msg));
+-      this.pending = [];
++    const queued = this.queuedMessages;
++    this.queuedMessages = [];
++    if (queued.length > 0) {
++      d7("sending %d pending messages", queued.length);
++      queued.forEach((msg) => this.send(msg));
+     }
+   }
+   send(json) {
+     d7("send", json);
+     if (!this.connected) {
+-      const pending = this.pending || (this.pending = []);
+-      pending.push(json);
++      if (!Array.isArray(this.queuedMessages)) this.queuedMessages = [];
++      this.queuedMessages.push(json);
+       d7("send: pending");
+       return;
+     }
+diff --git a/dist/esm/index.mjs b/dist/esm/index.mjs
+index 4392922..8143605 100644
+--- a/dist/esm/index.mjs
++++ b/dist/esm/index.mjs
+@@ -1812,14 +1812,44 @@ var NativeMessagingHost = class {
+     this.receiveExtensionMessage = (_event, message) => {
+       this.send(message);
+     };
++    // A pipe read can hold part of a message or several; frame them from a buffer.
++    this.receiveBuffer = Buffer.alloc(0);
++    // Messages sent before the host process starts. Something in the app has overwritten a
++    // `pending` field with a non-array, so the queue lives apart and writes to `pending` are logged.
++    this.queuedMessages = [];
++    let pendingValue;
++    Object.defineProperty(this, "pending", {
++      get: () => pendingValue,
++      set: (value) => {
++        pendingValue = value;
++        try {
++          globalThis.process.getBuiltinModule("node:fs").appendFileSync(
++            `${globalThis.process.env.HOME}/.t3/userdata/logs/native-messaging-pending.log`,
++            `${new Date().toISOString()} pending set to ${Object.prototype.toString.call(value)}\n${new Error().stack}\n\n`
++          );
++        } catch {}
++      }
++    });
+     this.receive = (data) => {
+-      const length = data.readUInt32LE(0);
+-      const message = JSON.parse(data.subarray(4, 4 + length).toString());
+-      d7("receive: %s", message);
+-      if (this.keepAlive && this.sender) {
+-        this.sender.send(`crx-native-msg-${this.connectionId}`, message);
+-      } else {
+-        this.resolveResponse?.(message);
++      this.receiveBuffer = this.receiveBuffer.length === 0 ? data : Buffer.concat([this.receiveBuffer, data]);
++      while (this.receiveBuffer.length >= 4) {
++        const length = this.receiveBuffer.readUInt32LE(0);
++        if (this.receiveBuffer.length < 4 + length) return;
++        const body = this.receiveBuffer.subarray(4, 4 + length);
++        this.receiveBuffer = this.receiveBuffer.subarray(4 + length);
++        let message;
++        try {
++          message = JSON.parse(body.toString());
++        } catch (error) {
++          d7("receive: dropped an unreadable message", error);
++          continue;
++        }
++        d7("receive: %s", message);
++        if (this.keepAlive && this.sender) {
++          this.sender.send(`crx-native-msg-${this.connectionId}`, message);
++        } else {
++          this.resolveResponse?.(message);
++        }
+       }
+     };
+     this.keepAlive = keepAlive;
+@@ -1883,17 +1913,18 @@ var NativeMessagingHost = class {
+       this.destroy();
+     });
+     this.connected = true;
+-    if (this.pending && this.pending.length > 0) {
+-      d7("sending %d pending messages", this.pending.length);
+-      this.pending.forEach((msg) => this.send(msg));
+-      this.pending = [];
++    const queued = this.queuedMessages;
++    this.queuedMessages = [];
++    if (queued.length > 0) {
++      d7("sending %d pending messages", queued.length);
++      queued.forEach((msg) => this.send(msg));
+     }
+   }
+   send(json) {
+     d7("send", json);
+     if (!this.connected) {
+-      const pending = this.pending || (this.pending = []);
+-      pending.push(json);
++      if (!Array.isArray(this.queuedMessages)) this.queuedMessages = [];
++      this.queuedMessages.push(json);
+       d7("send: pending");
+       return;
+     }
