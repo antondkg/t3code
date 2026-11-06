@@ -16,6 +16,7 @@ import * as DateTime from "effect/DateTime";
 import * as Layer from "effect/Layer";
 import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
+import { nativeSourceMessageId } from "@t3tools/provider-acp/server/adapter";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
@@ -89,7 +90,33 @@ const make = Effect.gen(function* () {
             turn.nativeTurnRef?.strength === "strong" ? [turn.nativeTurnRef.nativeId] : [],
           ),
         );
-        const turns = snapshot.turns.filter((turn) => !ownedTurns.has(turn.nativeTurnId));
+        const ownedMessages = new Set(
+          records.turnItems.flatMap((item) => {
+            if (
+              item.runId === null ||
+              item.nativeItemRef?.driver !== "acpRegistry" ||
+              item.nativeItemRef.nativeId === null
+            )
+              return [];
+            const id = nativeSourceMessageId(item.nativeItemRef.nativeId);
+            return id === undefined ? [] : [id];
+          }),
+        );
+        const ownedItems = new Set(
+          records.turnItems.flatMap((item) =>
+            item.runId !== null &&
+            item.nativeItemRef?.strength === "strong" &&
+            item.nativeItemRef.nativeId !== null
+              ? [item.nativeItemRef.nativeId]
+              : [],
+          ),
+        );
+        const turns = snapshot.turns.filter(
+          (turn) =>
+            !ownedTurns.has(turn.nativeTurnId) &&
+            !turn.nativeMessageIds.some((id) => ownedMessages.has(id)) &&
+            !turn.nativeToolIds.some((id) => ownedItems.has(id)),
+        );
         const messages = turns.flatMap((turn) => turn.messages);
         const positions = new Map<number, number>();
         const turnItems = turns.flatMap((turn) => {

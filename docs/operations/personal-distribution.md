@@ -58,8 +58,8 @@ the official release's asset digest. Run `vp run check:changed <new-tag>`, then 
 ACP import and continuation test against isolated state. Check first import, repeated import,
 history retention across a fork, and an already-attached thread. The upstream replay importer excludes threads with T3 turns. The explicit OpenCode bridge
 reads the native API without opening an ACP session, reconciles imported rows through the event
-store, and preserves run-owned rows. It uses native user-message IDs captured from ACP echoes
-to avoid duplicating T3 turns. Validate that correlation when updating either ACP implementation.
+store, and preserves run-owned rows. It uses native user-message IDs from ACP echoes and native assistant-message IDs embedded
+in ACP item identities to avoid duplicating T3 turns, including weak turn refs. Validate that correlation when updating either ACP implementation.
 
 Commit, push, and build both hosts from that commit. Tag it with `v<personal-version>`. Publish
 the DMG, ZIP, `latest-mac.yml`, Linux runtime archive, SHA256SUMS and build receipts to a release
