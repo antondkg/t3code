@@ -122,7 +122,8 @@ with (lock_dir / "personal-build.lock").open("w") as lock:
             raise SystemExit("Build the CLI target on a Linux x86_64 host")
         cli_archive(output)
     artifacts = {p.name: digest(p) for p in output.iterdir()
-                 if p.is_file() and p.suffix in {".dmg", ".zip", ".gz"}}
+                 if p.is_file() and f"{RELEASE['version']}-" in p.name
+                 and p.suffix in {".dmg", ".zip", ".gz"}}
     metadata = {**RELEASE, "sourceCommit": subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(), "artifacts": artifacts}
     (output / "personal-build.json").write_text(json.dumps(metadata, indent=2) + "\n")
