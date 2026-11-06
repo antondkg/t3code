@@ -12,6 +12,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 // @effect-diagnostics-next-line nodeBuiltinImport:off - Version output must flush before Electron exits, without acquiring the runtime.
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
+import * as Config from "effect/Config";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -79,6 +80,7 @@ import * as DesktopBrowserHost from "./preview/DesktopBrowserHost.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import * as PreviewPasskeys from "./preview/Passkeys.ts";
 import * as DesktopWindow from "./window/DesktopWindow.ts";
+import * as PreviewBrowserExtensions from "./preview/BrowserExtensions.ts";
 import * as DesktopWslBackend from "./wsl/DesktopWslBackend.ts";
 import * as DesktopWslEnvironment from "./wsl/DesktopWslEnvironment.ts";
 import * as DesktopWslServerTree from "./wsl/DesktopWslServerTree.ts";
@@ -178,11 +180,31 @@ const layerDesktopServerExposure = DesktopServerExposure.layer.pipe(
   Layer.provideMerge(layerDesktopFoundation),
 );
 
+// Precedes preview sessions so their creation can install extension support.
+const layerPreviewBrowserExtensions = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const environment = yield* DesktopEnvironment.DesktopEnvironment;
+    const runFork = Effect.runForkWith(yield* Effect.context<never>());
+    // T3CODE_PREVIEW_EXTENSIONS=0 turns preview browser extensions off.
+    const setting = yield* Config.String("T3CODE_PREVIEW_EXTENSIONS").pipe(
+      Config.withDefault(""),
+      Effect.orElseSucceed(() => ""),
+    );
+    PreviewBrowserExtensions.install({
+      preloadPath: environment.path.join(environment.dirname, "preview-extension-preload.cjs"),
+      platform: environment.platform,
+      enabled: setting !== "0",
+      report: (message, cause) => runFork(Effect.logWarning(message, cause)),
+    });
+  }),
+);
+
 const layerDesktopPreview = PreviewManager.layer.pipe(
   Layer.provideMerge(DesktopBrowserHost.layer),
   // IPC needs both services on the same BrowserSession.
   Layer.provideMerge(BrowserImport.layer.pipe(Layer.provide(LinuxBrowserSecret.layer))),
   Layer.provideMerge(BrowserSession.layer),
+  Layer.provideMerge(layerPreviewBrowserExtensions),
   Layer.provideMerge(PreviewPasskeys.layer),
   Layer.provideMerge(layerDesktopFoundation),
 );

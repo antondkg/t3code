@@ -4,6 +4,9 @@ const DESKTOP_RUNTIME_EXTERNAL_PREFIXES = [
   "@crowecawcaw/xa11y",
   "@clerk/electron-passkeys",
   "electron-webauthn",
+  // Both resolve their sandboxed preload scripts from their own package directories.
+  "electron-chrome-extensions",
+  "electron-chrome-web-store",
   "ffi-rs",
   "@yuuang/",
   // Playwright reads its runtime bundle/driver from disk; inlining cannot replace those files.
