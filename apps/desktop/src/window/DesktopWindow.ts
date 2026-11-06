@@ -30,6 +30,7 @@ import {
   WINDOW_FULLSCREEN_STATE_CHANNEL,
 } from "../ipc/channels.ts";
 import { PASSKEY_BRIDGE_ARGUMENT } from "../preview/GuestProtocol.ts";
+import * as PreviewBrowserExtensions from "../preview/BrowserExtensions.ts";
 import * as PreviewManager from "../preview/Manager.ts";
 import * as PreviewPasskeys from "../preview/Passkeys.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
@@ -622,6 +623,7 @@ export const make = Effect.gen(function* () {
     installContextMenu(window, window.webContents);
     window.webContents.on("did-attach-webview", (_event, contents) => {
       installContextMenu(window, contents);
+      PreviewBrowserExtensions.attachGuest(window, contents);
       void runPromise(previewManager.prepareWebview(contents));
     });
 

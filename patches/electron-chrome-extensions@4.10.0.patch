@@ -1,0 +1,80 @@
+diff --git a/dist/cjs/index.js b/dist/cjs/index.js
+index a91ca8f..c3a622b 100644
+--- a/dist/cjs/index.js
++++ b/dist/cjs/index.js
+@@ -1849,14 +1849,28 @@ var NativeMessagingHost = class {
+     this.receiveExtensionMessage = (_event, message) => {
+       this.send(message);
+     };
++    // A pipe read can hold part of a message or several; frame them from a buffer.
++    this.pending = Buffer.alloc(0);
+     this.receive = (data) => {
+-      const length = data.readUInt32LE(0);
+-      const message = JSON.parse(data.subarray(4, 4 + length).toString());
+-      d7("receive: %s", message);
+-      if (this.keepAlive && this.sender) {
+-        this.sender.send(`crx-native-msg-${this.connectionId}`, message);
+-      } else {
+-        this.resolveResponse?.(message);
++      this.pending = this.pending.length === 0 ? data : Buffer.concat([this.pending, data]);
++      while (this.pending.length >= 4) {
++        const length = this.pending.readUInt32LE(0);
++        if (this.pending.length < 4 + length) return;
++        const body = this.pending.subarray(4, 4 + length);
++        this.pending = this.pending.subarray(4 + length);
++        let message;
++        try {
++          message = JSON.parse(body.toString());
++        } catch (error) {
++          d7("receive: dropped an unreadable message", error);
++          continue;
++        }
++        d7("receive: %s", message);
++        if (this.keepAlive && this.sender) {
++          this.sender.send(`crx-native-msg-${this.connectionId}`, message);
++        } else {
++          this.resolveResponse?.(message);
++        }
+       }
+     };
+     this.keepAlive = keepAlive;
+diff --git a/dist/esm/index.mjs b/dist/esm/index.mjs
+index 4392922..e835271 100644
+--- a/dist/esm/index.mjs
++++ b/dist/esm/index.mjs
+@@ -1812,14 +1812,28 @@ var NativeMessagingHost = class {
+     this.receiveExtensionMessage = (_event, message) => {
+       this.send(message);
+     };
++    // A pipe read can hold part of a message or several; frame them from a buffer.
++    this.pending = Buffer.alloc(0);
+     this.receive = (data) => {
+-      const length = data.readUInt32LE(0);
+-      const message = JSON.parse(data.subarray(4, 4 + length).toString());
+-      d7("receive: %s", message);
+-      if (this.keepAlive && this.sender) {
+-        this.sender.send(`crx-native-msg-${this.connectionId}`, message);
+-      } else {
+-        this.resolveResponse?.(message);
++      this.pending = this.pending.length === 0 ? data : Buffer.concat([this.pending, data]);
++      while (this.pending.length >= 4) {
++        const length = this.pending.readUInt32LE(0);
++        if (this.pending.length < 4 + length) return;
++        const body = this.pending.subarray(4, 4 + length);
++        this.pending = this.pending.subarray(4 + length);
++        let message;
++        try {
++          message = JSON.parse(body.toString());
++        } catch (error) {
++          d7("receive: dropped an unreadable message", error);
++          continue;
++        }
++        d7("receive: %s", message);
++        if (this.keepAlive && this.sender) {
++          this.sender.send(`crx-native-msg-${this.connectionId}`, message);
++        } else {
++          this.resolveResponse?.(message);
++        }
+       }
+     };
+     this.keepAlive = keepAlive;
