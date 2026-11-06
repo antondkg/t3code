@@ -135,6 +135,7 @@ function shouldPublishAgentAwarenessEvent(
         (turnItemUpdateCanEndBackgroundWork(event.payload) ||
           turnItemCanChangeUserWait(event.payload))
       );
+    case "transcript.items-removed":
     case "message.updated":
     case "plan.updated":
     case "checkpoint-scope.created":

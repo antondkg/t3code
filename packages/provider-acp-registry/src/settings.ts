@@ -41,6 +41,15 @@ export const AcpRegistrySettings = makeProviderSettingsSchema(
         providerSettingsForm: { placeholder: "Registry default", clearWhenEmpty: "omit" },
       }),
     ),
+    nativeHistorySourceInstanceId: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Native history provider",
+        description:
+          "Optional provider instance on this environment that owns the original transcript.",
+        providerSettingsForm: { clearWhenEmpty: "omit" },
+      }),
+    ),
     commandArgs: Schema.Array(Schema.String).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),

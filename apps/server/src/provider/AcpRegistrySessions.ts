@@ -141,17 +141,19 @@ const make = Effect.gen(function* () {
         historyOrigin: existing.historyOrigin,
         hasRun: existing.latestRunId !== null,
       });
-      yield* agentSessionImporter.importNativeHistory({ threadId, workspaceRoot }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new AcpRegistryOperationError({
-              reason: "session_import_failed",
-              message: "Could not import the ACP session history.",
-              cause,
-            }),
-        ),
-      );
-      return { threadId, imported: repairing } as const;
+      const importedMessages = yield* agentSessionImporter
+        .importNativeHistory({ threadId, workspaceRoot })
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new AcpRegistryOperationError({
+                reason: "session_import_failed",
+                message: "Could not import the ACP session history.",
+                cause,
+              }),
+          ),
+        );
+      return { threadId, imported: repairing || importedMessages > 0 } as const;
     }
 
     const commandId = CommandId.make(yield* random.uuidV4());

@@ -32,6 +32,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
+import * as NativeHistoryImporter from "./NativeHistoryImporter.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
@@ -190,6 +191,7 @@ function messageEvents(input: {
 }
 
 const make = Effect.gen(function* () {
+  const nativeHistory = yield* Effect.serviceOption(NativeHistoryImporter.NativeHistoryImporter);
   const scanner = yield* AgentSessionScanner.AgentSessionScanner;
   const orchestrator = yield* Orchestrator.OrchestratorV2;
   const projects = yield* ProjectService.ProjectService;
@@ -499,6 +501,10 @@ const make = Effect.gen(function* () {
     readonly threadId: ThreadId;
     readonly workspaceRoot: string;
   }) {
+    if (Option.isSome(nativeHistory)) {
+      const imported = yield* nativeHistory.value.refresh(input.threadId);
+      if (imported !== null) return imported;
+    }
     const pendingThread = Effect.map(
       orchestrator.getThreadRecords(input.threadId, ["providerThreads", "runs"]),
       (records) =>

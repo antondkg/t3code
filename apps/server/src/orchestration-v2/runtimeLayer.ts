@@ -13,6 +13,7 @@ import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.t
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
 import * as ProviderInstallationGate from "../provider/ProviderInstallationGate.ts";
+import * as NativeHistoryImporter from "../project/NativeHistoryImporter.ts";
 import * as AgentSessionImporter from "../project/AgentSessionImporter.ts";
 import * as AgentSessionScanner from "../project/AgentSessionScanner.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -242,6 +243,12 @@ const layerOrchestratorProvided = Orchestrator.layer.pipe(
   ),
 );
 
+const layerNativeHistoryImporterProvided = NativeHistoryImporter.layer.pipe(
+  Layer.provide(
+    Layer.mergeAll(layerOrchestratorProvided, layerEventSink, ThreadCommandExecutor.layer),
+  ),
+);
+
 // One scanner serves the wizard's scan and imports, so imports can reuse its candidates.
 const layerAgentSessionScannerProvided = AgentSessionScanner.layer.pipe(
   Layer.provide(ProviderSessionRuntime.layer),
@@ -249,6 +256,7 @@ const layerAgentSessionScannerProvided = AgentSessionScanner.layer.pipe(
 const layerAgentSessionImporterProvided = AgentSessionImporter.layer.pipe(
   Layer.provide(
     Layer.mergeAll(
+      layerNativeHistoryImporterProvided,
       layerAgentSessionScannerProvided,
       layerProjectService,
       layerOrchestratorProvided,
@@ -266,6 +274,7 @@ const layerThreadManagementProvided = ThreadManagementService.layerWithLegacyImp
     Layer.mergeAll(
       layerOrchestratorProvided,
       layerLegacyV1ThreadImporterProvided,
+      layerNativeHistoryImporterProvided,
       layerCommandReceiptStoreProvided,
       layerProviderSessionManagerProvided,
       layerThreadWorktreeRestore,

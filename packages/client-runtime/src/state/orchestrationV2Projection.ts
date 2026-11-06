@@ -401,6 +401,18 @@ export function applyOrchestrationV2ProjectionEvent(
       };
     case "runtime-request.updated":
       return { ...base, runtimeRequests: upsertEntity(base.runtimeRequests, event.payload) };
+    case "transcript.items-removed": {
+      const messages = new Set(event.payload.messageIds);
+      const items = new Set(event.payload.turnItemIds);
+      return {
+        ...base,
+        messages: base.messages.filter((item) => item.runId !== null || !messages.has(item.id)),
+        turnItems: base.turnItems.filter((item) => item.runId !== null || !items.has(item.id)),
+        visibleTurnItems: base.visibleTurnItems.filter(
+          (item) => item.item.runId !== null || !items.has(item.item.id),
+        ),
+      };
+    }
     case "message.updated":
       return { ...base, messages: upsertEntity(base.messages, event.payload) };
     case "plan.updated":
