@@ -275,7 +275,7 @@ it.effect(
         modelSelection: {
           instanceId,
           model: "claude-agent/opus",
-          options: [{ id: "variant", value: "high" }],
+          options: [{ id: "effort", value: "high" }],
         },
         turns: [
           {
