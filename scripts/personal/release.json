@@ -15,6 +15,12 @@
       "head": null,
       "summary": "Chrome extensions (1Password by default) in the desktop preview browser.",
       "retireWhen": "Upstream ships extension support in the preview browser, or electron-chrome-extensions patches the browser namespace itself."
+    },
+    {
+      "pullRequest": "https://github.com/pingdotgg/t3code/pull/30868",
+      "head": "b69afe0fa85d268fd81a516338a6f164937221f7",
+      "summary": "Tiled chats: up to six panes split right or below, resizable, movable and persisted, built on #30868's split view.",
+      "retireWhen": "Upstream ships workspace panes (redesign #28845) or merges #30868."
     }
   ],
   "linuxRuntimeSha256": "cd2a3a82479d4a21e27050b138a7569d601a91a70d4a98c183df2881ef0e6eb0",
