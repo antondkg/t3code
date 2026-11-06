@@ -1839,6 +1839,11 @@ code {
   }
 }
 
+/* Only panes along the window's top edge sit under the title bar. */
+[data-chat-pane-below-top] .drag-region {
+  -webkit-app-region: no-drag;
+}
+
 .drag-region button,
 .drag-region input,
 .drag-region textarea,

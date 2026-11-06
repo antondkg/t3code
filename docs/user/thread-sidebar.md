@@ -320,20 +320,22 @@ answer its questions.
 
 ## Split panes
 
-On web and desktop, two threads can sit side by side, each with its own composer,
-terminal, and right panel. Both keep running and streaming while you work in either.
+On web and desktop, up to six threads can be tiled, each with its own composer,
+terminal, and right panel. They all keep running and streaming while you work in any of them.
 
-Right-click a thread in the sidebar and choose **Open in split**. It opens beside the
-current thread and takes focus.
+Right-click a thread in the sidebar and choose **Open in split** or **Open in split
+below**. It opens beside or under the focused pane and takes focus.
 
-The focused pane is the one the sidebar and command palette act on. Click into the
-other pane to switch. Opening a thread from the sidebar replaces the focused pane's
-thread; a thread already open in the other pane moves focus there instead, so one
-thread never shows twice.
+The focused pane is the one the sidebar and command palette act on. Click into another
+pane to switch. Opening a thread from the sidebar replaces the focused pane's thread; a
+thread already open in another pane moves focus there instead, so one thread never
+shows twice.
 
-Choose **Close pane** in a pane's header to go back to one thread. Closing a pane does
-not stop its thread. When the window is too narrow for two panes, only the focused one
-shows until there is room again. A split lasts until you close it or reload the app.
+Drag a divider to resize panes; double-click it to split the space evenly. To rearrange,
+drag a pane's grip in its header onto an edge of another pane. **Close pane** in the
+header removes it without stopping its thread. When the window is too small for every
+pane, only the focused one shows until there is room again. The layout is remembered
+after a reload.
 
 ## Snooze until later
 
