@@ -1,9 +1,9 @@
 {
-  "version": "0.1.8-personal.1",
+  "version": "0.1.10-personal.12",
   "repository": "antondkg/t3code",
   "rustToolchain": "1.95.0",
-  "upstreamTag": "v0.1.8-nightly.20261106.4275",
-  "upstreamCommit": "6577c6b6185167c0e502fa01f9e8e8f2dee6ff25",
+  "upstreamTag": "v0.1.10-nightly.20261114.4669",
+  "upstreamCommit": "db2cc2026427c5eb647a08538c12402341db0fab",
   "patches": [
     {
       "pullRequest": null,
@@ -42,6 +42,6 @@
       "retireWhen": "Upstream separates working from waiting threads in the sidebar."
     }
   ],
-  "linuxRuntimeSha256": "cd2a3a82479d4a21e27050b138a7569d601a91a70d4a98c183df2881ef0e6eb0",
+  "linuxRuntimeSha256": "aa4fb84284c2383ca4c64e07c4349276b6c3b36b5900ce0b028850f08595cdfa",
   "nativeSessionModelPolicy": "Retain the model selected in each existing native ACP session."
 }
