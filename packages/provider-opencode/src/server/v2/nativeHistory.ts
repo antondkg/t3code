@@ -229,7 +229,7 @@ export const readNativeHistory = Effect.fn("OpenCode2.readNativeHistory")(functi
   if (id == null) return null;
   if (id in (yield* connection.client.session.active())) return null;
   const native = yield* connection.client.session.get({ sessionID: Session.ID.make(id) });
-  const sourceRevision = `opencode-native-v3:${DateTime.formatIso(native.time.updated)}:${native.time.idle === undefined ? "" : DateTime.formatIso(native.time.idle)}`;
+  const sourceRevision = `opencode-native-v4:${DateTime.formatIso(native.time.updated)}:${native.time.idle === undefined ? "" : DateTime.formatIso(native.time.idle)}`;
   if (sourceRevision === knownRevision) return null;
   const history = yield* OpenCode2Client.paginate(
     { sessionID: Session.ID.make(id), order: "asc" as const, limit: 100 },
@@ -249,7 +249,14 @@ export const readNativeHistory = Effect.fn("OpenCode2.readNativeHistory")(functi
             model: `${native.model.providerID}/${native.model.id}`,
             ...(native.model.variant === undefined
               ? {}
-              : { options: [{ id: "variant", value: native.model.variant }] }),
+              : {
+                  options: [
+                    {
+                      id: thread.driver === "acpRegistry" ? "effort" : "variant",
+                      value: native.model.variant,
+                    },
+                  ],
+                }),
           },
         }),
   };
