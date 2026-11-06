@@ -260,6 +260,8 @@ import {
 } from "../composerDraftStore";
 import { useShownThreadRouteTarget } from "../hooks/useShownThreadRouteTarget";
 import { useChatPaneCommands } from "../hooks/useChatPaneCommands";
+import { useShallow } from "zustand/react/shallow";
+import { chatPaneList, useChatPanesStore, type ChatWorkspace } from "../chatPanesStore";
 import {
   SidebarSearchResultRow,
   SortableThreadRow,
@@ -267,6 +269,7 @@ import {
   type SidebarSweepAction,
 } from "./sidebar/SidebarThreadRow";
 import { SidebarDraftBlock } from "./sidebar/SidebarDraftBlock";
+import { SidebarWorkspaceBlock } from "./sidebar/SidebarWorkspaceBlock";
 import {
   SidebarProjectFolderHeader,
   sidebarFolderRowId,
@@ -1083,7 +1086,18 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     routeDraftRedirect,
   );
   const routeThreadKey = routeThreadRef ? scopedThreadKey(routeThreadRef) : null;
-  const { openInSplit } = useChatPaneCommands();
+  const { openInSplit, openWorkspace, removeFromWorkspace } = useChatPaneCommands();
+  // Workspace threads list in the Workspaces block instead of their usual sections.
+  const workspaceThreadKeyList = useChatPanesStore(
+    useShallow((state) =>
+      state.workspaces.flatMap((workspace) =>
+        chatPaneList(workspace).flatMap((pane) =>
+          pane.target.kind === "server" ? [scopedThreadKey(pane.target.threadRef)] : [],
+        ),
+      ),
+    ),
+  );
+  const workspaceThreadKeys = new Set(workspaceThreadKeyList);
 
   // A selection made under one scope can hold threads the next scope hides.
   // The viewport outlives the scope and does not anchor, so a new list starts at the top.
@@ -1957,9 +1971,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       list: readonly EnvironmentThreadShell[],
       section: SidebarSection,
     ): SidebarListItem[] =>
-      list.map((thread) => {
+      list.flatMap((thread) => {
         const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
-        return { kind: "thread", key, section };
+        return workspaceThreadKeys.has(key) ? [] : [{ kind: "thread" as const, key, section }];
       });
     // Boring mode keeps a pinned open project or one the user filtered to, so it can start a thread.
     if (
@@ -2556,6 +2570,28 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     },
   );
 
+  const handleWorkspaceContextMenu = useStableCallback(
+    (workspace: ChatWorkspace, position: { x: number; y: number }) => {
+      void (async () => {
+        const api = readLocalApi();
+        if (!api) return;
+        const clicked = await settlePromise(() =>
+          api.contextMenu.show(
+            [
+              { id: "open-workspace" as const, label: "Open workspace", icon: "layout-grid" },
+              { id: "ungroup-workspace" as const, label: "Ungroup", icon: "x" },
+            ],
+            position,
+          ),
+        );
+        if (clicked._tag === "Failure") return;
+        if (clicked.value === "open-workspace") openWorkspace(workspace.id);
+        if (clicked.value === "ungroup-workspace") {
+          useChatPanesStore.getState().dissolve(workspace.id);
+        }
+      })();
+    },
+  );
   const handleDraftContextMenu = useStableCallback(
     (draftId: DraftId, position: { x: number; y: number }) => {
       void (async () => {
@@ -2673,6 +2709,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               ),
               canTurnIntoProject: canTurnThreadIntoProject(threadRef),
               canOpenInSplit: routeTarget !== null && threadKey !== routeThreadKey,
+              inWorkspace: workspaceThreadKeys.has(threadKey),
               supports: {
                 settlement: configLoaded,
                 autoSettleOptOut: supportsAutoSettleOptOut,
@@ -2701,6 +2738,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           return;
         }
         switch (clicked.value) {
+          case "remove-from-workspace":
+            removeFromWorkspace(threadRef);
+            return;
           case "open-in-split":
           case "open-in-split-below":
             if (
@@ -3532,6 +3572,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                               />,
                             );
                             for (const thread of folder.threads) {
+                              if (workspaceThreadKeys.has(threadShellKey(thread))) continue;
                               items.push(
                                 renderThreadRow(
                                   thread,
@@ -3556,6 +3597,16 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             );
                             break;
                           case "pinned-divider":
+                            items.push(
+                              <SidebarWorkspaceBlock
+                                key="workspaces"
+                                routeThreadKey={routeThreadKey}
+                                onOpenWorkspace={openWorkspace}
+                                onOpenThread={navigateToThread}
+                                onWorkspaceContextMenu={handleWorkspaceContextMenu}
+                                onThreadContextMenu={handleThreadContextMenu}
+                              />,
+                            );
                             items.push(
                               <SidebarDragBoundary
                                 key="pinned-divider"

@@ -322,24 +322,29 @@ side chats.
 On mobile, a thread lists its side chats above the composer. Tap one to open it and
 answer its questions.
 
-## Split panes
+## Workspaces
 
-On web and desktop, up to six threads can be tiled, each with its own composer,
-terminal, and right panel. They all keep running and streaming while you work in any of them.
+On web and desktop, up to six threads can be tiled into a workspace, each with its own
+composer, terminal, and right panel. They all keep running and streaming while you work in
+any of them.
 
 Right-click a thread in the sidebar and choose **Open in split** or **Open in split
-below**. It opens beside or under the focused pane and takes focus.
+below**. It opens beside or under the thread you are on, and the two become a workspace;
+from inside a workspace, the thread joins it. You can also drag a thread from the sidebar onto
+an edge of any pane to open it there; dropping it on a composer adds it as context instead.
+Workspaces list under **Pinned**, with their threads, which leave their usual sections while
+they are tiled.
 
-The focused pane is the one the sidebar and command palette act on. Click into another
-pane to switch. Opening a thread from the sidebar replaces the focused pane's thread; a
-thread already open in another pane moves focus there instead, so one thread never
-shows twice.
+Opening any other thread shows it on its own and leaves the workspace as it is. Click the
+workspace, or one of its threads, to bring the whole layout back. The focused pane is the one
+the sidebar and command palette act on; click into another pane to switch.
 
-Drag a divider to resize panes; double-click it to split the space evenly. To rearrange,
-drag a pane's grip in its header onto an edge of another pane. **Close pane** in the
-header removes it without stopping its thread. When the window is too small for every
-pane, only the focused one shows until there is room again. The layout is remembered
-after a reload.
+Drag a divider to resize panes; double-click it to split the space evenly. To rearrange, drag a
+pane's grip in its header onto an edge of another pane. **Close pane** in the header, or
+**Remove from workspace** in a thread's menu, takes a thread out without stopping it; a
+workspace down to one thread ends. Right-click a workspace and choose **Ungroup** to return all
+its threads to the sidebar. When the window is too small for every pane, only the focused one
+shows until there is room again. Workspaces are remembered after a reload.
 
 ## Snooze until later
 
