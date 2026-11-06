@@ -1,16 +1,22 @@
 {
-  "version": "0.1.7-personal.3",
+  "version": "0.1.8-personal.1",
   "repository": "antondkg/t3code",
   "rustToolchain": "1.95.0",
-  "upstreamTag": "v0.1.7",
-  "upstreamCommit": "322f6544dfad0a3c8a0c8cbecf2c7f7874b14268",
+  "upstreamTag": "v0.1.8-nightly.20261106.4275",
+  "upstreamCommit": "6577c6b6185167c0e502fa01f9e8e8f2dee6ff25",
   "patches": [
     {
       "pullRequest": "https://github.com/pingdotgg/t3code/pull/22155",
       "head": "3735605596ce3402b6a13cb31ae4657cfe63c2b9",
       "retireWhen": "An upstream release includes native ACP history import and its cleanup and replay fixes."
+    },
+    {
+      "pullRequest": null,
+      "head": null,
+      "summary": "Chrome extensions (1Password by default) in the desktop preview browser.",
+      "retireWhen": "Upstream ships extension support in the preview browser, or electron-chrome-extensions patches the browser namespace itself."
     }
   ],
-  "linuxRuntimeSha256": "c089892bf7922e2e73c6f44a5d1ea125c99f70e378c18361cbbed2fba1920e6c",
+  "linuxRuntimeSha256": "cd2a3a82479d4a21e27050b138a7569d601a91a70d4a98c183df2881ef0e6eb0",
   "nativeSessionModelPolicy": "Retain the model selected in each existing native ACP session."
 }
