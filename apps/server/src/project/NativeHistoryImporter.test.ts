@@ -11,6 +11,7 @@ import {
   ProviderInstanceId,
   ProviderDriverKind,
   OrchestrationV2AppThread,
+  OrchestrationV2Run,
   OrchestrationV2ProviderThread,
   type OrchestrationV2ConversationMessage,
 } from "@t3tools/contracts";
@@ -133,7 +134,7 @@ const message = (id: string, text: string): OrchestrationV2ConversationMessage =
   createdAt: now,
   updatedAt: now,
 });
-function tool(id: string): OrchestrationV2TurnItem {
+function tool(id: string): Extract<OrchestrationV2TurnItem, { type: "command_execution" }> {
   return {
     id: TurnItemId.make(id),
     threadId,
@@ -205,7 +206,64 @@ it.effect(
             type: "message.updated",
             payload: {
               ...message("owned-message", "T3-owned work"),
+              role: "assistant",
+              createdBy: "agent",
               runId: RunId.make("owned-run"),
+            },
+          },
+        ],
+      });
+      const runAt = DateTime.makeUnsafe("2026-01-01T00:00:01Z");
+      const run = OrchestrationV2Run.make({
+        id: RunId.make("owned-run"),
+        threadId,
+        ordinal: 1,
+        providerInstanceId: instanceId,
+        modelSelection: { instanceId, model: "default" },
+        providerThreadId: providerThread.id,
+        userMessageId: MessageId.make("owned-user"),
+        rootNodeId: null,
+        activeAttemptId: null,
+        status: "completed",
+        requestedAt: runAt,
+        startedAt: runAt,
+        completedAt: runAt,
+        checkpointId: null,
+        contextHandoffId: null,
+      });
+      yield* sink.write({
+        events: [
+          {
+            id: EventId.make("owned-run"),
+            threadId,
+            occurredAt: runAt,
+            type: "run.created",
+            payload: run,
+          },
+          {
+            id: EventId.make("owned-user"),
+            threadId,
+            occurredAt: runAt,
+            type: "message.updated",
+            payload: { ...message("owned-user", "Continue"), runId: run.id },
+          },
+          {
+            id: EventId.make("owned-item"),
+            threadId,
+            occurredAt: now,
+            type: "turn-item.updated",
+            payload: {
+              ...tool("owned-item"),
+              type: "assistant_message",
+              messageId: MessageId.make("owned-message"),
+              text: "T3-owned work",
+              streaming: false,
+              runId: RunId.make("owned-run"),
+              nativeItemRef: {
+                driver,
+                nativeId: "ses_native:turn:1:assistant:message:msg_owned",
+                strength: "weak",
+              },
             },
           },
         ],
@@ -216,8 +274,17 @@ it.effect(
         turns: [
           {
             nativeTurnId: "native-message",
+            nativeMessageIds: ["native-message"],
+            nativeToolIds: [],
             messages: [original],
             turnItems: [tool("native-tool")],
+          },
+          {
+            nativeTurnId: "native-owned-user",
+            nativeMessageIds: ["native-owned-user", "msg_owned"],
+            nativeToolIds: [],
+            messages: [message("native-owned-user", "must not duplicate the T3 turn")],
+            turnItems: [],
           },
         ],
         attachments: [
@@ -275,7 +342,7 @@ it.effect(
         ["full native history"],
       );
       assert.equal(after.providerThreads[0]!.nativeThreadRef!.nativeId, "ses_native");
-      assert.equal(after.thread.settledOverride, "settled");
+      assert.equal(after.thread.settledOverride, null);
       const config = yield* ServerConfig.ServerConfig;
       const fs = yield* FileSystem.FileSystem;
       const attachment = after.messages.find((row) => row.id === original.id)!.attachments[0]!;
@@ -285,7 +352,7 @@ it.effect(
       const repairedItems = (yield* projections.getThreadRecords(threadId, ["turnItems"]))
         .turnItems;
       assert.deepEqual(
-        repairedItems.map((item) => [item.id, item.ordinal]),
+        repairedItems.filter((item) => item.runId === null).map((item) => [item.id, item.ordinal]),
         [["native-tool", 1]],
       );
       assert.equal(after.messages.find((row) => row.id === "owned-message")?.text, "T3-owned work");
@@ -304,7 +371,14 @@ it.effect(
           ...snapshot.turns,
           {
             nativeTurnId: "later",
-            messages: [message("later", "external follow-up")],
+            nativeMessageIds: ["later"],
+            nativeToolIds: [],
+            messages: [
+              {
+                ...message("later", "external follow-up"),
+                createdAt: DateTime.makeUnsafe("2026-01-01T00:00:10Z"),
+              },
+            ],
             turnItems: [tool("later-tool")],
           },
         ],
@@ -328,7 +402,18 @@ it.effect(
 
       assert.equal(
         (yield* projections.getThreadRecords(threadId, ["messages"])).messages.length,
-        3,
+        4,
+      );
+      assert.deepEqual(
+        (yield* projections.getThreadRecords(threadId, ["turnItems"])).turnItems.map((item) => [
+          item.id,
+          item.ordinal,
+        ]),
+        [
+          ["native-tool", 1],
+          ["owned-item", 1000001],
+          ["later-tool", 1500001],
+        ],
       );
     }).pipe(
       Effect.provide(

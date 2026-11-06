@@ -23,6 +23,8 @@ export function projectNativeHistory(
   if (threadId === null) return { sourceRevision: "unbound", turns: [], attachments: [] };
   const turns: Array<{
     nativeTurnId: string;
+    nativeMessageIds: Array<string>;
+    nativeToolIds: Array<string>;
     messages: Array<OrchestrationV2ConversationMessage>;
     turnItems: Array<OrchestrationV2TurnItem>;
   }> = [];
@@ -31,9 +33,16 @@ export function projectNativeHistory(
   let turn: (typeof turns)[number] | undefined;
   for (const message of history) {
     if (turn === undefined || message.type === "user") {
-      turn = { nativeTurnId: message.id, messages: [], turnItems: [] };
+      turn = {
+        nativeTurnId: message.id,
+        nativeMessageIds: [],
+        nativeToolIds: [],
+        messages: [],
+        turnItems: [],
+      };
       turns.push(turn);
     }
+    turn.nativeMessageIds.push(message.id);
     const at = message.time.created;
     const base = (nativeId: string, startedAt = at, completedAt = at) => ({
       id: TurnItemId.make(`native-history:${threadId}:${nativeId}`),
@@ -125,6 +134,7 @@ export function projectNativeHistory(
               streaming: false,
             });
           } else {
+            turn.nativeToolIds.push(part.id);
             const state = part.state;
             const output =
               state.status === "completed" || state.status === "error"
@@ -219,7 +229,7 @@ export const readNativeHistory = Effect.fn("OpenCode2.readNativeHistory")(functi
   if (id == null) return null;
   if (id in (yield* connection.client.session.active())) return null;
   const native = yield* connection.client.session.get({ sessionID: Session.ID.make(id) });
-  const sourceRevision = `${DateTime.formatIso(native.time.updated)}:${native.time.idle === undefined ? "" : DateTime.formatIso(native.time.idle)}`;
+  const sourceRevision = `opencode-native-v2:${DateTime.formatIso(native.time.updated)}:${native.time.idle === undefined ? "" : DateTime.formatIso(native.time.idle)}`;
   if (sourceRevision === knownRevision) return null;
   const history = yield* OpenCode2Client.paginate(
     { sessionID: Session.ID.make(id), order: "asc" as const, limit: 100 },
