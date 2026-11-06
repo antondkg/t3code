@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tarfile
@@ -17,6 +18,9 @@ RELEASE = json.loads((ROOT / "scripts/personal/release.json").read_text())
 MANIFESTS = ["apps/server/package.json", "apps/desktop/package.json",
              "apps/web/package.json", "packages/contracts/package.json"]
 
+
+# Patched packages that only the desktop app loads, so the server runtime ignores their patches.
+DESKTOP_ONLY_PATCHES = {"electron-chrome-extensions"}
 
 def run(*args):
     subprocess.run(args, cwd=ROOT, env=ENV, check=True)
@@ -29,10 +33,23 @@ def digest(path):
 
 def cli_archive(output):
     # The native dependencies stay pinned to the source baseline; JS and the executable rebuild.
-    native_inputs = ["native", "pnpm-lock.yaml", "pnpm-workspace.yaml",
-                     "apps/server/package.json", "scripts/lib/cli-external-packages.ts"]
+    native_inputs = ["native", "apps/server/package.json", "scripts/lib/cli-external-packages.ts"]
     subprocess.run(["git", "diff", "--quiet", RELEASE["upstreamCommit"], "--",
                     *native_inputs], cwd=ROOT, check=True)
+    # The workspace file may only gain patches for packages the server never loads.
+    workspace_diff = subprocess.check_output(["git", "diff", "-U0", RELEASE["upstreamCommit"], "--",
+                                              "pnpm-workspace.yaml"], cwd=ROOT, text=True)
+    for line in workspace_diff.splitlines():
+        if line.startswith(("---", "+++", "@@", "diff ", "index ")):
+            continue
+        package = re.match(r"^\+  ([^@\s][^@]*)@[^:]+: patches/", line)
+        if package is None or package[1] not in DESKTOP_ONLY_PATCHES:
+            raise SystemExit(f"pnpm-workspace.yaml changes the server's dependencies: {line}")
+    # Desktop-only dependencies add lockfile entries; any changed or removed line could move the server's.
+    lock_diff = subprocess.check_output(["git", "diff", "-U0", RELEASE["upstreamCommit"], "--",
+                                         "pnpm-lock.yaml"], cwd=ROOT, text=True)
+    if any(line.startswith("-") and not line.startswith("---") for line in lock_diff.splitlines()):
+        raise SystemExit("pnpm-lock.yaml changes existing resolutions; build the full CLI archive")
     version = RELEASE["version"]
     base = RELEASE["upstreamTag"].removeprefix("v")
     cache = Path.home() / ".cache/t3-personal"
