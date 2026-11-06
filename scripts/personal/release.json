@@ -1,0 +1,14 @@
+{
+  "version": "0.1.7-personal.1",
+  "repository": "antondkg/t3code",
+  "upstreamTag": "v0.1.7",
+  "upstreamCommit": "322f6544dfad0a3c8a0c8cbecf2c7f7874b14268",
+  "patches": [
+    {
+      "pullRequest": "https://github.com/pingdotgg/t3code/pull/22155",
+      "head": "3735605596ce3402b6a13cb31ae4657cfe63c2b9",
+      "retireWhen": "An upstream release includes native ACP history import and its cleanup and replay fixes."
+    }
+  ],
+  "linuxRuntimeSha256": "c089892bf7922e2e73c6f44a5d1ea125c99f70e378c18361cbbed2fba1920e6c"
+}
