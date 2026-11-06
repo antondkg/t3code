@@ -210,3 +210,22 @@ Architecture and its constraints: `docs/internals/overview.md`. Glossary: `docs/
 ## Additional tips
 
 - Security is important, but should not be over-indexed on, especially for dev mode/maintainer-only features.
+
+## Personal fork
+
+This checkout is Antonio's personal build: branch `codex/personal-nightly` on `origin`
+(antondkg/t3code), which is an upstream nightly tag plus a short patch series. It runs as
+`/Applications/T3 Code (Beta).app` on this Mac and as a matching runtime on `vallor-dev`.
+[Personal distribution](docs/operations/personal-distribution.md) has the details.
+
+- Upgrade with `python3 scripts/personal/upgrade.py --remote vallor-dev`. It rebases onto the
+  newest nightly, bumps `scripts/personal/release.json`, runs `check:changed`, builds and signs the
+  Mac app, installs the Linux runtime on `vallor-dev`, and swaps the app in when T3 quits. You are
+  probably running inside that app: never quit or kill it yourself, tell the user to quit it.
+- A LaunchAgent runs the same command daily with `--unattended`. On a rebase conflict it aborts and
+  notifies; finishing that is your job. Run the command, resolve each conflict keeping upstream's
+  intent and the patch's purpose, `git rebase --continue`, and run it again. `rerere` is on.
+- A personal change is an ordinary commit on this branch. Keep it to new files plus a few hook
+  lines in upstream code, add it to `patches` in `release.json` with a `retireWhen`, and push.
+  The next upgrade run rebuilds because the version commit is no longer the tip.
+- Drop a patch once upstream ships it (the ACP history fix is upstream PR #22155).
