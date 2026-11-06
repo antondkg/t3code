@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import plistlib
 import re
 import shlex
 import shutil
@@ -19,6 +20,10 @@ APP = Path("/Applications/T3 Code (Beta).app")
 USERDATA = Path.home() / ".t3/userdata"
 BACKUPS = Path.home() / ".t3/personal-backups"
 KEEP_BACKUPS = 3
+HELPER_PID = BACKUPS / "install.pid"
+SCHEDULE_LABEL = "com.antondkg.t3-personal-upgrade"
+SCHEDULE_PLIST = Path.home() / f"Library/LaunchAgents/{SCHEDULE_LABEL}.plist"
+SCHEDULE_LOG = Path.home() / "Library/Logs/t3-personal-upgrade.log"
 BUMP_SUBJECT = "build: personal "
 # T3's own agent sessions export this; a test fixture asserts it is absent.
 CHECK_ENV = {k: v for k, v in os.environ.items() if k != "T3_ACP_MCP_AUTHORIZATION"}
@@ -62,12 +67,28 @@ def linux_runtime_sha(tag):
     raise SystemExit(f"{tag} has no Linux runtime archive")
 
 
-def update_source(tag, remote):
+def notify(message):
+    print(message)
+    script = f"display notification {json.dumps(message)} with title \"T3 personal build\""
+    subprocess.run(["osascript", "-e", script], check=False)
+
+
+def up_to_date(tag):
+    manifest = json.loads(MANIFEST.read_text())
+    return (manifest["upstreamTag"] == tag
+            and out("git", "log", "-1", "--format=%s").startswith(BUMP_SUBJECT))
+
+
+def update_source(tag, remote, unattended):
     manifest = json.loads(MANIFEST.read_text())
     on_tag = subprocess.run(["git", "merge-base", "--is-ancestor", tag, "HEAD"], cwd=ROOT).returncode == 0
     if not on_tag:
         print(f"Rebasing personal patches from {manifest['upstreamTag']} onto {tag}")
         if subprocess.run(["git", "rebase", "--onto", tag, manifest["upstreamTag"]], cwd=ROOT).returncode:
+            if unattended:
+                subprocess.run(["git", "rebase", "--abort"], cwd=ROOT, check=False)
+                raise SystemExit(f"Rebase onto {tag} conflicts; ask an agent to run the upgrade "
+                                 "(see AGENTS.md, Personal fork).")
             raise SystemExit("Rebase stopped on a conflict. Resolve it, run `git rebase --continue`, "
                              "then run this command again.")
     manifest["version"] = next_version(manifest["version"], tag)
@@ -202,16 +223,62 @@ def finish_install(new_app):
     run("open", str(APP))
 
 
-def install_mac(version):
+def replace_pending_install():
+    """A newer build supersedes one still waiting for T3 to quit."""
+    try:
+        pid = int(HELPER_PID.read_text())
+        command = out("ps", "-o", "command=", "-p", str(pid))
+    except (FileNotFoundError, ValueError, subprocess.CalledProcessError):
+        return
+    if "--finish-install" in command:
+        os.kill(pid, 15)
+
+
+def install_mac(version, unattended):
+    replace_pending_install()
     new_app = staged_app(version)
+    for stale in BACKUPS.glob("staged-*"):
+        if stale != new_app.parent:
+            shutil.rmtree(stale, ignore_errors=True)
     if not t3_running():
         finish_install(new_app)
         return
     log = BACKUPS / "install.log"
     with log.open("a") as handle:
-        subprocess.Popen([sys.executable, __file__, "--finish-install", str(new_app)],
-                         stdout=handle, stderr=handle, start_new_session=True)
-    print(f"Built {version}. Quit T3 (Cmd+Q) to install it; it reopens on its own. Log: {log}")
+        helper = subprocess.Popen([sys.executable, __file__, "--finish-install", str(new_app)],
+                                  stdout=handle, stderr=handle, start_new_session=True)
+    HELPER_PID.write_text(str(helper.pid))
+    message = f"T3 {version} is ready. Quit T3 to install it; it reopens on its own."
+    notify(message) if unattended else print(f"{message} Log: {log}")
+
+
+def schedule(at, args):
+    hour, minute = (int(part) for part in at.split(":"))
+    SCHEDULE_PLIST.parent.mkdir(parents=True, exist_ok=True)
+    SCHEDULE_LOG.parent.mkdir(parents=True, exist_ok=True)
+    plist = {
+        "Label": SCHEDULE_LABEL,
+        "ProgramArguments": [sys.executable, str(Path(__file__).resolve()), "--unattended",
+                             *[option for host in args.remote for option in ("--remote", host)],
+                             "--remote-dir", args.remote_dir,
+                             *(["--skip-checks"] if args.skip_checks else [])],
+        "WorkingDirectory": str(ROOT),
+        "EnvironmentVariables": {"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+        "StartCalendarInterval": {"Hour": hour, "Minute": minute},
+        "StandardOutPath": str(SCHEDULE_LOG),
+        "StandardErrorPath": str(SCHEDULE_LOG),
+    }
+    unschedule()
+    SCHEDULE_PLIST.write_bytes(plistlib.dumps(plist))
+    run("launchctl", "bootstrap", f"gui/{os.getuid()}", str(SCHEDULE_PLIST))
+    print(f"Upgrades run daily at {at}: {' '.join(plist['ProgramArguments'])}\nLog: {SCHEDULE_LOG}")
+
+
+def unschedule():
+    if SCHEDULE_PLIST.exists():
+        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(SCHEDULE_PLIST)],
+                       stderr=subprocess.DEVNULL, check=False)
+        SCHEDULE_PLIST.unlink()
 
 
 def main():
@@ -223,18 +290,43 @@ def main():
                         help="checkout of this fork on each remote, relative to its home")
     parser.add_argument("--skip-checks", action="store_true")
     parser.add_argument("--no-install", action="store_true")
+    parser.add_argument("--force", action="store_true",
+                        help="rebuild even when already on the target tag")
+    parser.add_argument("--unattended", action="store_true",
+                        help="abort conflicting rebases and report through notifications")
+    parser.add_argument("--schedule", metavar="HH:MM",
+                        help="run these options daily with --unattended, then exit")
+    parser.add_argument("--unschedule", action="store_true")
     parser.add_argument("--finish-install", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.finish_install:
         finish_install(args.finish_install)
         return
+    if args.unschedule:
+        unschedule()
+        return
+    if args.schedule:
+        schedule(args.schedule, args)
+        return
+    try:
+        upgrade(args)
+    except BaseException as error:
+        if args.unattended and not isinstance(error, KeyboardInterrupt):
+            notify(f"Upgrade failed: {error}. Log: {SCHEDULE_LOG}")
+        raise
+
+
+def upgrade(args):
     if platform.system() != "Darwin":
         raise SystemExit("Run this on the Mac")
     if out("git", "status", "--porcelain", "--untracked-files=no"):
         raise SystemExit("Commit or stash changes first")
     run("git", "fetch", "-q", "upstream", "--tags", "--force")
     tag = args.tag or latest_nightly()
-    manifest = update_source(tag, args.remote)
+    if up_to_date(tag) and not args.force:
+        print(f"Already on {tag}; --force rebuilds")
+        return
+    manifest = update_source(tag, args.remote, args.unattended)
     version = manifest["version"]
     if not args.skip_checks:
         run(vp(), "run", "check:changed", tag, env=CHECK_ENV)
@@ -246,7 +338,7 @@ def main():
         for host in args.remote:
             install_remote(host, args.remote_dir, version, commit)
     if not args.no_install:
-        install_mac(version)
+        install_mac(version, args.unattended)
 
 
 if __name__ == "__main__":

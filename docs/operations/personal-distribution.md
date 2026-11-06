@@ -47,6 +47,10 @@ then swapped in when T3 quits, and reopens; the previous app and a SQLite-API co
 `~/.t3/userdata` stay in `~/.t3/personal-backups/` (last three). On a rebase conflict, resolve it,
 run `git rebase --continue`, and rerun the command. Publishing a release stays optional.
 
+`--schedule 05:00` (with the same options) installs a LaunchAgent that runs the command daily with
+`--unattended`: it skips when already current, aborts a conflicting rebase, and reports through a
+notification. Its log is `~/Library/Logs/t3-personal-upgrade.log`; `--unschedule` removes it.
+
 ## Build
 
 Install the upstream prerequisites, the manifest's Rust toolchain with `rustup toolchain install`,
