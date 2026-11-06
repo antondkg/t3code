@@ -1,4 +1,5 @@
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -15,9 +16,11 @@ import {
 import {
   chatPaneGeometry,
   chatPanesMinSize,
-  isChatSplitOpen,
+  MAX_CHAT_PANES,
   resolveChatPanes,
+  SINGLE_CHAT_PANE_LAYOUT,
   useChatPanesStore,
+  workspaceForTarget,
   type ChatPaneDivider,
   type ChatPaneEdge,
   type ChatPaneRect,
@@ -35,10 +38,12 @@ import {
   type ThreadRouteTarget,
 } from "../threadRoutes";
 import { CHAT_PANE_DRAG_TYPE, ChatPaneContext, type ChatPaneContextValue } from "./chat/chatPane";
+import { threadPaneDropTargetProps, useThreadPaneDrop } from "./chat/threadContextDrag";
 import { ThreadRouteContent } from "./ThreadRouteView";
 import { Button } from "./ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
 import { SidebarInset } from "./ui/sidebar";
+import { toastManager } from "./ui/toast";
 
 /** Room for the chat column and the right panel beside it at their 360px minimums. */
 const CHAT_PANE_INLINE_RIGHT_PANEL_MIN_WIDTH = 720;
@@ -61,17 +66,18 @@ export function ChatPanes({
 }) {
   const router = useRouter();
   const navigate = useNavigate();
-  const layout = useChatPanesStore((state) => state.layout);
-  const panes = resolveChatPanes(layout, routeTarget);
+  const workspaces = useChatPanesStore((state) => state.workspaces);
+  const workspace = workspaceForTarget(workspaces, routeTarget);
+  const panes = resolveChatPanes(workspaces, routeTarget);
   const paneThreadKeys = useComposerDraftStore(
     useShallow((store) => panes.map((pane) => paneThreadKey(pane.target, store))),
   );
-  const splitOpen = isChatSplitOpen(layout);
+  const splitOpen = workspace !== null;
   // Too small for every pane: only the focused one renders, and the split returns with room.
   // The store holds it so notifications treat hidden panes' threads as not visible.
   const fitsSplit = useChatPanesStore((state) => state.splitFits);
-  const geometry = chatPaneGeometry(layout);
-  const minSize = chatPanesMinSize(layout.root);
+  const geometry = chatPaneGeometry(workspace ?? SINGLE_CHAT_PANE_LAYOUT);
+  const minSize = chatPanesMinSize(workspace?.root ?? null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const observeContainer = (container: HTMLDivElement) => {
     containerRef.current = container;
@@ -130,12 +136,29 @@ export function ChatPanes({
       : navigate({ to: "/draft/$draftId", params: buildDraftThreadRouteParams(target.draftId) }));
   };
   const closePane = (paneId: string) => {
-    const focusTarget = useChatPanesStore.getState().closePane(paneId);
+    if (workspace === null) return;
+    const focusTarget = useChatPanesStore
+      .getState()
+      .closePane({ workspaceId: workspace.id, paneId });
     if (focusTarget) focusPane(focusTarget);
   };
-  const dockPane = (paneId: string, targetPaneId: string, edge: ChatPaneEdge) =>
-    useChatPanesStore.getState().dock({ routeTarget, paneId, targetPaneId, edge });
+  const dockPane = (paneId: string, targetPaneId: string, edge: ChatPaneEdge) => {
+    if (workspace === null) return;
+    useChatPanesStore.getState().dock({ workspaceId: workspace.id, paneId, targetPaneId, edge });
+  };
   const alone = !splitOpen || !fitsSplit;
+  const dropThread = (
+    paneTarget: ThreadRouteTarget,
+    threadRef: ScopedThreadRef,
+    edge: ChatPaneEdge,
+  ) => {
+    const target: ThreadRouteTarget = { kind: "server", threadRef };
+    if (useChatPanesStore.getState().dropThread({ paneTarget, target, edge })) {
+      focusPane(target);
+    } else if (panes.length >= MAX_CHAT_PANES) {
+      toastManager.add({ type: "info", title: `A workspace holds up to ${MAX_CHAT_PANES} chats` });
+    }
+  };
 
   return (
     <SidebarInset
@@ -172,6 +195,11 @@ export function ChatPanes({
               }
               onClose={() => closePane(pane.id)}
               onDock={(paneId, edge) => dockPane(paneId, pane.id, edge)}
+              onThreadDrop={
+                fitsSplit && !background
+                  ? (threadRef, edge) => dropThread(pane.target, threadRef, edge)
+                  : undefined
+              }
             />
           );
         })}
@@ -180,6 +208,7 @@ export function ChatPanes({
           : geometry.dividers.map((divider) => (
               <ChatPaneDividerHandle
                 key={divider.splitId}
+                workspaceId={workspace?.id ?? ""}
                 divider={divider}
                 containerRef={containerRef}
               />
@@ -223,9 +252,11 @@ function percent(value: number): string {
 
 /** Drags the boundary of one split, keeping each side at its panes' minimum size. */
 function ChatPaneDividerHandle({
+  workspaceId,
   divider,
   containerRef,
 }: {
+  workspaceId: string;
   divider: ChatPaneDivider;
   containerRef: RefObject<HTMLDivElement | null>;
 }) {
@@ -250,12 +281,11 @@ function ChatPaneDividerHandle({
       const next = ((row ? moveEvent.clientX : moveEvent.clientY) - start) / size;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() =>
-        useChatPanesStore
-          .getState()
-          .resize(
-            divider.splitId,
-            Math.min(Math.max(next, minFirst), Math.max(minFirst, maxFirst)),
-          ),
+        useChatPanesStore.getState().resize({
+          workspaceId,
+          splitId: divider.splitId,
+          ratio: Math.min(Math.max(next, minFirst), Math.max(minFirst, maxFirst)),
+        }),
       );
     };
     const end = () => {
@@ -289,7 +319,9 @@ function ChatPaneDividerHandle({
       )}
       style={style}
       onPointerDown={onPointerDown}
-      onDoubleClick={() => useChatPanesStore.getState().resize(divider.splitId, 0.5)}
+      onDoubleClick={() =>
+        useChatPanesStore.getState().resize({ workspaceId, splitId: divider.splitId, ratio: 0.5 })
+      }
     >
       <div
         aria-hidden
@@ -303,9 +335,13 @@ function ChatPaneDividerHandle({
 }
 
 function dropEdge(event: DragEvent<HTMLElement>): ChatPaneEdge {
-  const bounds = event.currentTarget.getBoundingClientRect();
-  const x = (event.clientX - bounds.left) / bounds.width;
-  const y = (event.clientY - bounds.top) / bounds.height;
+  return nearestEdge(event.currentTarget, { x: event.clientX, y: event.clientY });
+}
+
+function nearestEdge(element: HTMLElement, point: { x: number; y: number }): ChatPaneEdge {
+  const bounds = element.getBoundingClientRect();
+  const x = (point.x - bounds.left) / bounds.width;
+  const y = (point.y - bounds.top) / bounds.height;
   const distances: ReadonlyArray<readonly [ChatPaneEdge, number]> = [
     ["left", x],
     ["right", 1 - x],
@@ -336,6 +372,7 @@ function ChatPane({
   otherPaneThreadKeys,
   onClose,
   onDock,
+  onThreadDrop,
   onFocus,
   focusIntentRef,
 }: {
@@ -359,6 +396,8 @@ function ChatPane({
   onClose: () => void;
   /** Moves the dragged pane to an edge of this one. */
   onDock: (paneId: string, edge: ChatPaneEdge) => void;
+  /** Opens a thread dragged from the sidebar at an edge of this pane; absent when it cannot split. */
+  onThreadDrop: ((threadRef: ScopedThreadRef, edge: ChatPaneEdge) => void) | undefined;
   onFocus: () => void;
   focusIntentRef: RefObject<string | null>;
 }) {
@@ -398,6 +437,15 @@ function ChatPane({
     measure();
     return observeResize(node, measure);
   };
+  useThreadPaneDrop(onThreadDrop ? element : null, {
+    onOver: (point) => setDropPreview(point && element ? nearestEdge(element, point) : null),
+    onDrop: ({ threads, point }) => {
+      setDropPreview(null);
+      const [threadRef] = threads;
+      if (threadRef && element && onThreadDrop)
+        onThreadDrop(threadRef, nearestEdge(element, point));
+    },
+  });
   const chatPaneValue: ChatPaneContextValue = {
     element: alone ? null : element,
     narrow: !alone && narrow,
@@ -430,6 +478,7 @@ function ChatPane({
       data-chat-pane-narrow={(!alone && narrow) || undefined}
       data-chat-pane-thread={threadKey ?? undefined}
       data-background-thread-view={passive || undefined}
+      {...threadPaneDropTargetProps(onThreadDrop !== undefined)}
       onPointerDownCapture={passive ? onFocus : undefined}
       onFocusCapture={passive ? onFocusIn : undefined}
       onDragOverCapture={(event) => {

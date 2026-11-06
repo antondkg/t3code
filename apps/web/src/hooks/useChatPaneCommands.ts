@@ -4,8 +4,9 @@ import { type AnyRouter, useRouter } from "@tanstack/react-router";
 
 import {
   chatPaneList,
-  isChatSplitOpen,
+  chatPaneTargetMatches,
   useChatPanesStore,
+  workspaceForTarget,
   type ChatPaneEdge,
 } from "../chatPanesStore";
 import {
@@ -46,21 +47,21 @@ export function createChatPaneCommands(router: AnyRouter) {
   };
 
   /**
-   * Closes the pane showing a thread that is gone. True when that moved the route to the other
+   * Closes the pane showing a thread that is gone. True when that moved the route to another
    * pane, so the caller skips its own fallback navigation.
    */
   const closePaneShowing = (threadRef: ScopedThreadRef): boolean => {
     const store = useChatPanesStore.getState();
-    if (!isChatSplitOpen(store.layout)) return false;
-    const key = scopedThreadKey(threadRef);
-    const pane = chatPaneList(store.layout).find(
-      (candidate) =>
-        candidate.target.kind === "server" && scopedThreadKey(candidate.target.threadRef) === key,
-    );
-    if (!pane) return false;
-    const focusTarget = store.closePane(pane.id);
+    const target: ThreadRouteTarget = { kind: "server", threadRef };
+    const workspace = workspaceForTarget(store.workspaces, target);
+    const pane =
+      workspace &&
+      chatPaneList(workspace).find((candidate) => chatPaneTargetMatches(candidate, target));
+    if (!workspace || !pane) return false;
+    const focusTarget = store.closePane({ workspaceId: workspace.id, paneId: pane.id });
     // The removal can finish after the user left the thread, for example for Settings.
     const routeTarget = readRouteTarget();
+    const key = scopedThreadKey(threadRef);
     const routeShowsRemoved =
       routeTarget?.kind === "server" && scopedThreadKey(routeTarget.threadRef) === key;
     if (focusTarget === null || !routeShowsRemoved) return false;
@@ -69,7 +70,22 @@ export function createChatPaneCommands(router: AnyRouter) {
     return true;
   };
 
-  return { openInSplit, closePaneShowing };
+  /** Shows the workspace at the pane it last focused. */
+  const openWorkspace = (workspaceId: string) => {
+    const workspace = useChatPanesStore
+      .getState()
+      .workspaces.find((candidate) => candidate.id === workspaceId);
+    if (!workspace) return;
+    const panes = chatPaneList(workspace);
+    const pane = panes.find((candidate) => candidate.id === workspace.activePaneId) ?? panes[0];
+    if (pane) navigateTo(pane.target);
+  };
+
+  /** The thread stays open on its own; the rest of its workspace keeps its layout. */
+  const removeFromWorkspace = (threadRef: ScopedThreadRef) =>
+    useChatPanesStore.getState().removeThread({ kind: "server", threadRef });
+
+  return { openInSplit, closePaneShowing, openWorkspace, removeFromWorkspace };
 }
 
 export function useChatPaneCommands() {

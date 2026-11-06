@@ -154,6 +154,16 @@ const ICON_PATHS: Record<string, ReadonlyArray<{ tag: string; attrs: Record<stri
     { tag: "rect", attrs: { width: "18", height: "18", x: "3", y: "3", rx: "2" } },
     { tag: "path", attrs: { d: "M12 3v18" } },
   ],
+  x: [
+    { tag: "path", attrs: { d: "M18 6 6 18" } },
+    { tag: "path", attrs: { d: "m6 6 12 12" } },
+  ],
+  "layout-grid": [
+    { tag: "rect", attrs: { width: "7", height: "7", x: "3", y: "3", rx: "1" } },
+    { tag: "rect", attrs: { width: "7", height: "7", x: "14", y: "3", rx: "1" } },
+    { tag: "rect", attrs: { width: "7", height: "7", x: "14", y: "14", rx: "1" } },
+    { tag: "rect", attrs: { width: "7", height: "7", x: "3", y: "14", rx: "1" } },
+  ],
   "rows-2": [
     { tag: "rect", attrs: { width: "18", height: "18", x: "3", y: "3", rx: "2" } },
     { tag: "path", attrs: { d: "M3 12h18" } },

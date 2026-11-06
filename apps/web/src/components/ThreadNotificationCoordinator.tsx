@@ -153,7 +153,7 @@ export function startThreadNotifications(
       document.hasFocus() &&
       (active.environmentId !== environmentId || active.threadId !== thread.id) &&
       !backgroundChatPaneThreadRefs(
-        useChatPanesStore.getState().layout,
+        useChatPanesStore.getState().workspaces,
         resolveThreadRouteTarget(active),
         useChatPanesStore.getState().splitFits,
       ).some((ref) => ref.environmentId === environmentId && ref.threadId === thread.id)
