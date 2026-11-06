@@ -2702,7 +2702,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         }
         switch (clicked.value) {
           case "open-in-split":
-            if (openInSplit(threadRef) && isMobile) setOpenMobile(false);
+          case "open-in-split-below":
+            if (
+              openInSplit(threadRef, clicked.value === "open-in-split" ? "right" : "bottom") &&
+              isMobile
+            ) {
+              setOpenMobile(false);
+            }
             return;
           case "filter-by-project":
             if (threadProjectGroup) {

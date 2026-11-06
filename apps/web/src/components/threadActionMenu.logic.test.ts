@@ -60,6 +60,7 @@ describe("buildThreadActionMenuItems", () => {
           ];
       expect(items.filter((item) => item.disabled).map((item) => item.id)).toEqual(expected);
       expect(items.some((item) => item.id === "open-in-split")).toBe(true);
+      expect(items.some((item) => item.id === "open-in-split-below")).toBe(true);
       expect(
         items.find((item) => item.id === "snooze")?.children?.every((child) => child.disabled) ??
           true,
