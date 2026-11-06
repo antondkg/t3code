@@ -1,9 +1,9 @@
 {
-  "version": "0.1.8-personal.1",
+  "version": "0.1.10-personal.13",
   "repository": "antondkg/t3code",
   "rustToolchain": "1.95.0",
-  "upstreamTag": "v0.1.8-nightly.20261106.4275",
-  "upstreamCommit": "6577c6b6185167c0e502fa01f9e8e8f2dee6ff25",
+  "upstreamTag": "v0.1.10-nightly.20261116.4774",
+  "upstreamCommit": "16695c812fffe75e85f8cc3084d2c561aa3ca93f",
   "patches": [
     {
       "pullRequest": null,
@@ -48,6 +48,6 @@
       "retireWhen": "Upstream lets the right panel dock below the chat."
     }
   ],
-  "linuxRuntimeSha256": "cd2a3a82479d4a21e27050b138a7569d601a91a70d4a98c183df2881ef0e6eb0",
+  "linuxRuntimeSha256": "35718dd898b5a9eff329ad4ed14ceac5ec019d48783c5d4d1d1201acc4f84e9c",
   "nativeSessionModelPolicy": "Retain the model selected in each existing native ACP session."
 }
