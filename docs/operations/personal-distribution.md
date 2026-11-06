@@ -1,10 +1,21 @@
 # Personal distribution
 
-The `codex/personal` branch carries the ACP history fix and distribution configuration.
+The `codex/personal` branch carries the ACP history fix, preview browser extensions and
+distribution configuration. It follows upstream's nightly tags, which carry the current UI.
 Native imports use the agent-owned model instead of applying its new-session catalog default.
 Retire this follow-up when upstream preserves model selection while importing and continuing native sessions.
 `scripts/personal/release.json` pins the upstream tag, source commit, PR head, version and Linux
 runtime checksum. Production data and machine configuration never belong in this repository.
+
+## Preview browser extensions
+
+Persistent preview profiles load Chrome Web Store extensions, and the first profile installs
+1Password. Each profile signs in to 1Password on its own. `Cmd+Shift+X` in a preview page opens
+the popup; extension tabs open in their own windows. `T3CODE_PREVIEW_EXTENSIONS=0` turns this off.
+Electron 44's native `browser` namespace lacks the APIs electron-chrome-extensions adds to
+`chrome`, so `preview-extension-preload.ts` aliases one to the other. After bumping Electron or
+that library, check that 1Password's service worker still starts and its popup loads.
+Retire the patch when upstream ships extension support in the preview browser.
 
 ## OpenCode native history
 
@@ -34,7 +45,8 @@ python3 scripts/personal/build.py cli      # Linux x86_64: runtime archive
 
 The Linux build compiles the server executable and web client. It reuses the checksum-pinned
 upstream archive's unchanged native dependencies, resource monitor and libatomic license.
-The build refuses native/dependency changes relative to the baseline. Such changes require
+The build refuses native/dependency changes relative to the baseline, apart from new lockfile
+entries such as desktop-only dependencies. Such changes require
 upstream's full CLI archive build in a supported Linux packaging environment instead.
 
 Artifacts and a source/checksum receipt appear under ignored `release/personal/`.
@@ -44,7 +56,8 @@ replacing personal patches. Unsigned Mac builds may require manual installation 
 
 ## Move to a newer upstream release
 
-Create an update branch. Rebase the small patch series onto the new upstream tag, resolving
+Create an update branch. Pick the newest `v*-nightly.*` tag, or a stable tag to leave nightly.
+Rebase the small patch series onto it, resolving
 conflicts against upstream's intent. Remove the ACP patch when upstream ships an equivalent fix.
 
 ```sh
