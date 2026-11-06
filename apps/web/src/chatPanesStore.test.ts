@@ -4,12 +4,22 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   backgroundChatPaneThreadRefs,
+  CHAT_PANE_MIN_HEIGHT,
+  CHAT_PANE_MIN_WIDTH,
+  chatPaneGeometry,
+  chatPaneList,
+  chatPanesMinSize,
   closeChatPane,
-  isChatSplitOpen,
   commitChatPanes,
+  dockChatPane,
+  isChatSplitOpen,
+  MAX_CHAT_PANES,
   openChatSplit,
+  resizeChatSplit,
   resolveChatPanes,
+  restoreChatPanesLayout,
   SINGLE_CHAT_PANE_LAYOUT,
+  type ChatPaneSplit,
   type ChatPanesLayout,
 } from "./chatPanesStore";
 import { DraftId } from "./composerDraftStore";
@@ -19,9 +29,9 @@ const threadRef = (id: string) => scopeThreadRef(EnvironmentId.make("env"), Thre
 const thread = (id: string): ThreadRouteTarget => ({ kind: "server", threadRef: threadRef(id) });
 const draft = (id: string): ThreadRouteTarget => ({ kind: "draft", draftId: DraftId.make(id) });
 
-function paneIds() {
+function paneIds(prefix = "pane") {
   let next = 0;
-  return () => `pane-${++next}`;
+  return () => `${prefix}-${++next}`;
 }
 
 function split(left: ThreadRouteTarget, right: ThreadRouteTarget): ChatPanesLayout {
@@ -100,16 +110,95 @@ describe("chat panes", () => {
     ).toBe(layout);
   });
 
-  it("replaces the unfocused pane when the split is full", () => {
-    const layout = openChatSplit(split(thread("a"), thread("b")), {
+  it("adds panes beside the focused one up to the limit", () => {
+    const ids = paneIds();
+    let layout = SINGLE_CHAT_PANE_LAYOUT;
+    for (const id of ["b", "c", "d", "e", "f", "g"]) {
+      layout = openChatSplit(layout, {
+        routeTarget: thread("a"),
+        target: thread(id),
+        createPaneId: ids,
+      });
+    }
+    expect(chatPaneList(layout)).toHaveLength(MAX_CHAT_PANES);
+    // The focused pane splits each time, so the newest pane sits right beside it.
+    expect(shown(layout, thread("a")).map((pane) => pane.target)).toEqual([
+      "a",
+      "f",
+      "e",
+      "d",
+      "c",
+      "b",
+    ]);
+  });
+
+  it("stacks a pane below the focused one and sizes the area for both", () => {
+    const layout = openChatSplit(SINGLE_CHAT_PANE_LAYOUT, {
       routeTarget: thread("a"),
-      target: thread("c"),
+      target: thread("b"),
+      edge: "bottom",
       createPaneId: paneIds(),
     });
-    expect(shown(layout, thread("a"))).toEqual([
-      { id: "primary", target: "a", active: true },
-      { id: "pane-1", target: "c", active: false },
+    const { panes } = chatPaneGeometry(layout);
+    expect(panes.get("primary")).toEqual({ x: 0, y: 0, width: 1, height: 0.5 });
+    expect(panes.get("pane-1")).toEqual({ x: 0, y: 0.5, width: 1, height: 0.5 });
+    expect(chatPanesMinSize(layout.root)).toEqual({
+      width: CHAT_PANE_MIN_WIDTH,
+      height: CHAT_PANE_MIN_HEIGHT * 2,
+    });
+  });
+
+  it("moves a pane to another pane's edge without changing either pane's id", () => {
+    const ids = paneIds("extra");
+    const three = openChatSplit(split(thread("a"), thread("b")), {
+      routeTarget: thread("a"),
+      target: thread("c"),
+      createPaneId: ids,
+    });
+    const moved = dockChatPane(three, {
+      routeTarget: thread("a"),
+      paneId: "pane-1",
+      targetPaneId: "primary",
+      edge: "top",
+      createSplitId: () => "split-moved",
+    });
+    const { panes } = chatPaneGeometry(moved);
+    expect(panes.get("pane-1")).toMatchObject({ y: 0, height: 0.5 });
+    expect(panes.get("primary")).toMatchObject({ y: 0.5, height: 0.5 });
+    expect(
+      shown(moved, thread("a"))
+        .map((pane) => pane.id)
+        .sort(),
+    ).toEqual(["extra-1", "pane-1", "primary"]);
+  });
+
+  it("closing a nested focused pane focuses its neighbour", () => {
+    const ids = paneIds("extra");
+    const three = openChatSplit(split(thread("a"), thread("b")), {
+      routeTarget: thread("b"),
+      target: thread("c"),
+      edge: "bottom",
+      createPaneId: ids,
+    });
+    const focusedC = commitChatPanes(three, thread("c"));
+    const cPane = shown(focusedC, thread("c")).find((pane) => pane.active)!;
+    const result = closeChatPane(focusedC, cPane.id);
+    expect(result.focusTarget).toEqual(thread("b"));
+    expect(chatPaneList(result.layout).map((pane) => pane.target)).toEqual([
+      thread("a"),
+      thread("b"),
     ]);
+  });
+
+  it("resizes one split and restores only well-formed saved layouts", () => {
+    const layout = split(thread("a"), thread("b"));
+    const splitId = (layout.root as ChatPaneSplit).id;
+    const resized = resizeChatSplit(layout, splitId, 0.7);
+    expect(chatPaneGeometry(resized).panes.get("primary")?.width).toBeCloseTo(0.7);
+    expect(restoreChatPanesLayout(JSON.parse(JSON.stringify(resized)))).toEqual(resized);
+    expect(restoreChatPanesLayout({ root: { kind: "split", id: "x" } })).toBe(
+      SINGLE_CHAT_PANE_LAYOUT,
+    );
   });
 
   it("closing the unfocused pane returns to one pane without moving the route", () => {

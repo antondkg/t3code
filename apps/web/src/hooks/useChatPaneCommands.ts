@@ -2,7 +2,12 @@ import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { type AnyRouter, useRouter } from "@tanstack/react-router";
 
-import { isChatSplitOpen, useChatPanesStore } from "../chatPanesStore";
+import {
+  chatPaneList,
+  isChatSplitOpen,
+  useChatPanesStore,
+  type ChatPaneEdge,
+} from "../chatPanesStore";
 import {
   buildDraftThreadRouteParams,
   buildThreadRouteParams,
@@ -29,11 +34,13 @@ export function createChatPaneCommands(router: AnyRouter) {
           replace,
         }));
 
-  /** Opens `threadRef` beside the routed thread and focuses it; false with no thread routed. */
-  const openInSplit = (threadRef: ScopedThreadRef): boolean => {
+  /** Opens `threadRef` beside the focused pane and focuses it; false with no thread routed. */
+  const openInSplit = (threadRef: ScopedThreadRef, edge: ChatPaneEdge = "right"): boolean => {
     const routeTarget = readRouteTarget();
     if (routeTarget === null) return false;
-    useChatPanesStore.getState().openSplit({ routeTarget, target: { kind: "server", threadRef } });
+    useChatPanesStore
+      .getState()
+      .openSplit({ routeTarget, target: { kind: "server", threadRef }, edge });
     navigateTo({ kind: "server", threadRef });
     return true;
   };
@@ -46,7 +53,7 @@ export function createChatPaneCommands(router: AnyRouter) {
     const store = useChatPanesStore.getState();
     if (!isChatSplitOpen(store.layout)) return false;
     const key = scopedThreadKey(threadRef);
-    const pane = store.layout.panes.find(
+    const pane = chatPaneList(store.layout).find(
       (candidate) =>
         candidate.target.kind === "server" && scopedThreadKey(candidate.target.threadRef) === key,
     );
