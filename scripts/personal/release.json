@@ -1,9 +1,9 @@
 {
-  "version": "0.1.8-personal.1",
+  "version": "0.1.8-personal.15",
   "repository": "antondkg/t3code",
   "rustToolchain": "1.95.0",
-  "upstreamTag": "v0.1.8-nightly.20261106.4275",
-  "upstreamCommit": "6577c6b6185167c0e502fa01f9e8e8f2dee6ff25",
+  "upstreamTag": "v0.1.8-nightly.20261107.4314",
+  "upstreamCommit": "83a3674ffd84ffb33de768210c806cb1ac53fd80",
   "patches": [
     {
       "pullRequest": "https://github.com/pingdotgg/t3code/pull/22155",
@@ -29,6 +29,6 @@
       "retireWhen": "Upstream shows deployments and Graphite stacks on linked pull requests."
     }
   ],
-  "linuxRuntimeSha256": "cd2a3a82479d4a21e27050b138a7569d601a91a70d4a98c183df2881ef0e6eb0",
+  "linuxRuntimeSha256": "7ad37c75ffb98b2f57485ae7f56013d1557bfc571d019609c2ef0eced2b6e964",
   "nativeSessionModelPolicy": "Retain the model selected in each existing native ACP session."
 }
