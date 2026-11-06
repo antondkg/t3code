@@ -1,5 +1,5 @@
 {
-  "version": "0.1.7-personal.2",
+  "version": "0.1.7-personal.3",
   "repository": "antondkg/t3code",
   "rustToolchain": "1.95.0",
   "upstreamTag": "v0.1.7",
