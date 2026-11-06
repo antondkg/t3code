@@ -25,13 +25,19 @@ export interface ChatPaneSplit {
 
 export type ChatPaneNode = (ChatPane & { readonly kind: "pane" }) | ChatPaneSplit;
 
-/**
- * More than one pane means split. The route always shows the focused pane's thread, so a pane's
- * stored target is what it shows while unfocused and what focusing it navigates to.
- */
+/** One pane tree. Outside a workspace it is the routed thread alone. */
 export interface ChatPanesLayout {
   readonly root: ChatPaneNode | null;
   readonly activePaneId: string | null;
+}
+
+/**
+ * Threads tiled together. The route shows a workspace while it is on one of its threads, focusing
+ * that pane; any other route shows its thread alone and leaves every workspace as it was.
+ */
+export interface ChatWorkspace extends ChatPanesLayout {
+  readonly id: string;
+  readonly root: ChatPaneNode;
 }
 
 export interface ResolvedChatPane extends ChatPane {
@@ -64,7 +70,7 @@ export const CHAT_PANE_MIN_WIDTH = 360;
 export const CHAT_PANE_MIN_HEIGHT = 240;
 const FULL_RECT: ChatPaneRect = { x: 0, y: 0, width: 1, height: 1 };
 
-/** The one pane's id before any split; a split keeps it for the routed pane, so it stays mounted. */
+/** The lone thread's pane id; a new workspace keeps it for that thread, so its view stays mounted. */
 const PRIMARY_CHAT_PANE_ID = "primary";
 
 function chatPaneTargetKey(target: ThreadRouteTarget): string {
@@ -79,10 +85,6 @@ function leaves(node: ChatPaneNode | null): ReadonlyArray<ChatPane> {
 
 export function chatPaneList(layout: ChatPanesLayout): ReadonlyArray<ChatPane> {
   return leaves(layout.root);
-}
-
-export function isChatSplitOpen(layout: ChatPanesLayout): boolean {
-  return layout.root?.kind === "split";
 }
 
 function mapPanes(node: ChatPaneNode, map: (pane: ChatPane) => ChatPaneNode): ChatPaneNode {
@@ -137,27 +139,35 @@ function splitAt(
   });
 }
 
-/**
- * What each pane shows for the current route. A route that lands on another pane's thread
- * focuses that pane; any other route retargets the focused pane.
- */
+export function chatPaneTargetMatches(pane: ChatPane, target: ThreadRouteTarget): boolean {
+  return chatPaneTargetKey(pane.target) === chatPaneTargetKey(target);
+}
+
+export function workspaceForTarget(
+  workspaces: ReadonlyArray<ChatWorkspace>,
+  target: ThreadRouteTarget | null,
+): ChatWorkspace | null {
+  if (target === null) return null;
+  return (
+    workspaces.find((workspace) =>
+      chatPaneList(workspace).some((pane) => chatPaneTargetMatches(pane, target)),
+    ) ?? null
+  );
+}
+
+/** What each pane shows for the current route: its workspace, or the routed thread alone. */
 export function resolveChatPanes(
-  layout: ChatPanesLayout,
+  workspaces: ReadonlyArray<ChatWorkspace>,
   routeTarget: ThreadRouteTarget,
 ): ReadonlyArray<ResolvedChatPane> {
-  const panes = chatPaneList(layout);
-  if (!isChatSplitOpen(layout)) {
-    return [{ id: panes[0]?.id ?? PRIMARY_CHAT_PANE_ID, target: routeTarget, active: true }];
+  const workspace = workspaceForTarget(workspaces, routeTarget);
+  if (workspace === null) {
+    return [{ id: PRIMARY_CHAT_PANE_ID, target: routeTarget, active: true }];
   }
-  const routeKey = chatPaneTargetKey(routeTarget);
-  const routedPane = panes.find((pane) => chatPaneTargetKey(pane.target) === routeKey);
-  const activePaneId =
-    routedPane?.id ?? panes.find((pane) => pane.id === layout.activePaneId)?.id ?? panes[0]!.id;
-  return panes.map((pane) =>
-    pane.id === activePaneId
-      ? { id: pane.id, target: routeTarget, active: true }
-      : { ...pane, active: false },
-  );
+  return chatPaneList(workspace).map((pane) => ({
+    ...pane,
+    active: chatPaneTargetMatches(pane, routeTarget),
+  }));
 }
 
 /**
@@ -165,105 +175,158 @@ export function resolveChatPanes(
  * None while the area is too small for the split, since only the focused pane renders then.
  */
 export function backgroundChatPaneThreadRefs(
-  layout: ChatPanesLayout,
+  workspaces: ReadonlyArray<ChatWorkspace>,
   routeTarget: ThreadRouteTarget | null,
   splitFits: boolean,
 ): ReadonlyArray<ScopedThreadRef> {
   if (routeTarget === null || !splitFits) return [];
-  return resolveChatPanes(layout, routeTarget).flatMap((pane) =>
+  return resolveChatPanes(workspaces, routeTarget).flatMap((pane) =>
     !pane.active && pane.target.kind === "server" ? [pane.target.threadRef] : [],
   );
 }
 
-/** Records what `resolveChatPanes` showed, so unfocused panes keep their threads. */
+/** Remembers the routed pane, which a workspace reopens to from the sidebar. */
 export function commitChatPanes(
-  layout: ChatPanesLayout,
+  workspaces: ReadonlyArray<ChatWorkspace>,
   routeTarget: ThreadRouteTarget,
-): ChatPanesLayout {
-  if (!isChatSplitOpen(layout) || layout.root === null) return layout;
-  const resolved = resolveChatPanes(layout, routeTarget);
-  const active = resolved.find((pane) => pane.active);
-  if (!active) return layout;
-  const targets = new Map(resolved.map((pane) => [pane.id, pane.target]));
-  const root = mapPanes(layout.root, (pane) => {
-    const target = targets.get(pane.id) ?? pane.target;
-    return chatPaneTargetKey(target) === chatPaneTargetKey(pane.target)
-      ? { kind: "pane", ...pane }
-      : { kind: "pane", id: pane.id, target };
-  });
-  const unchanged =
-    active.id === layout.activePaneId &&
-    chatPaneList({ root, activePaneId: null }).every(
-      (pane, index) =>
-        chatPaneTargetKey(pane.target) === chatPaneTargetKey(chatPaneList(layout)[index]!.target),
-    );
-  return unchanged ? layout : { root, activePaneId: active.id };
+): ReadonlyArray<ChatWorkspace> {
+  const workspace = workspaceForTarget(workspaces, routeTarget);
+  const routed =
+    workspace && chatPaneList(workspace).find((pane) => chatPaneTargetMatches(pane, routeTarget));
+  if (!workspace || !routed || workspace.activePaneId === routed.id) return workspaces;
+  return workspaces.map((candidate) =>
+    candidate === workspace ? { ...candidate, activePaneId: routed.id } : candidate,
+  );
 }
 
-/** The routed pane as a one-pane tree, for opening the first split. */
-function withRoutedRoot(layout: ChatPanesLayout, routeTarget: ThreadRouteTarget) {
-  if (isChatSplitOpen(layout) && layout.root !== null) {
-    return { root: layout.root, activePaneId: layout.activePaneId ?? chatPaneList(layout)[0]!.id };
+function replaceWorkspace(
+  workspaces: ReadonlyArray<ChatWorkspace>,
+  id: string,
+  next: ChatPanesLayout,
+): ReadonlyArray<ChatWorkspace> {
+  // One pane left is no longer a workspace; its thread returns to the sidebar list.
+  if (next.root === null || next.root.kind === "pane") {
+    return workspaces.filter((workspace) => workspace.id !== id);
   }
-  const id = chatPaneList(layout)[0]?.id ?? PRIMARY_CHAT_PANE_ID;
-  return { root: { kind: "pane", id, target: routeTarget } as ChatPaneNode, activePaneId: id };
+  const root = next.root;
+  return workspaces.map((workspace) =>
+    workspace.id === id ? { id, root, activePaneId: next.activePaneId } : workspace,
+  );
+}
+
+/** Takes a thread out of whichever workspace holds it. */
+export function removeThreadFromWorkspaces(
+  workspaces: ReadonlyArray<ChatWorkspace>,
+  target: ThreadRouteTarget,
+): ReadonlyArray<ChatWorkspace> {
+  const workspace = workspaceForTarget(workspaces, target);
+  const pane =
+    workspace &&
+    chatPaneList(workspace).find((candidate) => chatPaneTargetMatches(candidate, target));
+  if (!workspace || !pane) return workspaces;
+  return closeChatPane(workspaces, { workspaceId: workspace.id, paneId: pane.id }).workspaces;
 }
 
 /**
- * Shows `target` on `edge` of the focused pane. A thread is shown in one pane at most, so one
- * already visible, or a full layout, leaves the layout as it is; navigating then focuses or
- * retargets as usual.
+ * Shows `target` on `edge` of the routed pane: in its workspace, or in a new one with the routed
+ * thread. A thread joins one workspace at most, so it leaves any other; a full workspace stays as it is.
  */
 export function openChatSplit(
-  layout: ChatPanesLayout,
+  workspaces: ReadonlyArray<ChatWorkspace>,
   input: {
     readonly routeTarget: ThreadRouteTarget;
     readonly target: ThreadRouteTarget;
     readonly edge?: ChatPaneEdge;
-    readonly createPaneId: () => string;
+    readonly createId: () => string;
   },
-): ChatPanesLayout {
-  const targetKey = chatPaneTargetKey(input.target);
-  const current = commitChatPanes(layout, input.routeTarget);
-  if (chatPaneTargetKey(input.routeTarget) === targetKey) return current;
-  // A single pane's stored target can be stale; only a split shows its panes' targets.
-  if (
-    isChatSplitOpen(current) &&
-    chatPaneList(current).some((pane) => chatPaneTargetKey(pane.target) === targetKey)
-  ) {
-    return current;
+): ReadonlyArray<ChatWorkspace> {
+  if (chatPaneTargetKey(input.routeTarget) === chatPaneTargetKey(input.target)) return workspaces;
+  const current = workspaceForTarget(workspaces, input.routeTarget);
+  if (current && chatPaneList(current).some((pane) => chatPaneTargetMatches(pane, input.target))) {
+    return workspaces;
   }
-  if (chatPaneList(current).length >= MAX_CHAT_PANES) return current;
-  const base = withRoutedRoot(current, input.routeTarget);
-  const added = { id: input.createPaneId(), target: input.target };
-  return {
-    root: splitAt(base.root, base.activePaneId, added, input.edge ?? "right", input.createPaneId()),
-    activePaneId: base.activePaneId,
+  if (current && chatPaneList(current).length >= MAX_CHAT_PANES) return workspaces;
+  const others = removeThreadFromWorkspaces(workspaces, input.target);
+  const base = current
+    ? (others.find((workspace) => workspace.id === current.id) ?? current)
+    : null;
+  const routedPane = base
+    ? chatPaneList(base).find((pane) => chatPaneTargetMatches(pane, input.routeTarget))!
+    : { id: PRIMARY_CHAT_PANE_ID, target: input.routeTarget };
+  const root: ChatPaneNode = base?.root ?? { kind: "pane", ...routedPane };
+  const added = { id: input.createId(), target: input.target };
+  const workspace: ChatWorkspace = {
+    id: base?.id ?? input.createId(),
+    root: splitAt(
+      root,
+      routedPane.id,
+      added,
+      input.edge ?? "right",
+      input.createId(),
+    ) as ChatPaneSplit,
+    activePaneId: routedPane.id,
   };
+  return base
+    ? others.map((candidate) => (candidate.id === base.id ? workspace : candidate))
+    : [...others, workspace];
 }
 
 /** Moves a pane to `edge` of another pane. Both keep their ids, so neither remounts. */
 export function dockChatPane(
-  layout: ChatPanesLayout,
+  workspaces: ReadonlyArray<ChatWorkspace>,
   input: {
-    readonly routeTarget: ThreadRouteTarget;
+    readonly workspaceId: string;
     readonly paneId: string;
     readonly targetPaneId: string;
     readonly edge: ChatPaneEdge;
     readonly createSplitId: () => string;
   },
-): ChatPanesLayout {
-  const current = commitChatPanes(layout, input.routeTarget);
-  if (input.paneId === input.targetPaneId || current.root === null) return current;
-  const panes = chatPaneList(current);
+): ReadonlyArray<ChatWorkspace> {
+  const workspace = workspaces.find((candidate) => candidate.id === input.workspaceId);
+  if (!workspace || input.paneId === input.targetPaneId) return workspaces;
+  const panes = chatPaneList(workspace);
   const moving = panes.find((pane) => pane.id === input.paneId);
-  if (!moving || !panes.some((pane) => pane.id === input.targetPaneId)) return current;
-  const remaining = removePane(current.root, input.paneId);
-  if (remaining === null) return current;
-  return {
-    ...current,
+  if (!moving || !panes.some((pane) => pane.id === input.targetPaneId)) return workspaces;
+  const remaining = removePane(workspace.root, input.paneId);
+  if (remaining === null) return workspaces;
+  return replaceWorkspace(workspaces, workspace.id, {
     root: splitAt(remaining, input.targetPaneId, moving, input.edge, input.createSplitId()),
-  };
+    activePaneId: workspace.activePaneId,
+  });
+}
+
+/**
+ * Puts a thread dragged in from the sidebar on `edge` of the pane showing `paneTarget`: its own
+ * pane moves there when both share a workspace, otherwise it opens there as a split does.
+ */
+export function dropThreadOnChatPane(
+  workspaces: ReadonlyArray<ChatWorkspace>,
+  input: {
+    readonly paneTarget: ThreadRouteTarget;
+    readonly target: ThreadRouteTarget;
+    readonly edge: ChatPaneEdge;
+    readonly createId: () => string;
+  },
+): ReadonlyArray<ChatWorkspace> {
+  const workspace = workspaceForTarget(workspaces, input.paneTarget);
+  const panes = workspace ? chatPaneList(workspace) : [];
+  const moving = panes.find((pane) => chatPaneTargetMatches(pane, input.target));
+  const anchor = panes.find((pane) => chatPaneTargetMatches(pane, input.paneTarget));
+  if (workspace && moving && anchor) {
+    return dockChatPane(workspaces, {
+      workspaceId: workspace.id,
+      paneId: moving.id,
+      targetPaneId: anchor.id,
+      edge: input.edge,
+      createSplitId: input.createId,
+    });
+  }
+  return openChatSplit(workspaces, {
+    routeTarget: input.paneTarget,
+    target: input.target,
+    edge: input.edge,
+    createId: input.createId,
+  });
 }
 
 /**
@@ -271,40 +334,51 @@ export function dockChatPane(
  * the thread the route should move to then, and null when the route needs no change.
  */
 export function closeChatPane(
-  layout: ChatPanesLayout,
-  paneId: string,
-): { readonly layout: ChatPanesLayout; readonly focusTarget: ThreadRouteTarget | null } {
-  if (layout.root === null || !chatPaneList(layout).some((pane) => pane.id === paneId)) {
-    return { layout, focusTarget: null };
+  workspaces: ReadonlyArray<ChatWorkspace>,
+  input: { readonly workspaceId: string; readonly paneId: string },
+): {
+  readonly workspaces: ReadonlyArray<ChatWorkspace>;
+  readonly focusTarget: ThreadRouteTarget | null;
+} {
+  const workspace = workspaces.find((candidate) => candidate.id === input.workspaceId);
+  if (!workspace || !chatPaneList(workspace).some((pane) => pane.id === input.paneId)) {
+    return { workspaces, focusTarget: null };
   }
-  const successor = successorPane(layout.root, paneId);
-  const root = removePane(layout.root, paneId);
-  const closedActive = layout.activePaneId === paneId;
-  const activePaneId = closedActive ? (successor?.id ?? null) : layout.activePaneId;
-  // The remaining panes keep their ids, so they stay mounted.
+  const successor = successorPane(workspace.root, input.paneId);
+  const closedActive = workspace.activePaneId === input.paneId;
   return {
-    layout: { root, activePaneId },
+    // The remaining panes keep their ids, so they stay mounted.
+    workspaces: replaceWorkspace(workspaces, workspace.id, {
+      root: removePane(workspace.root, input.paneId),
+      activePaneId: closedActive ? (successor?.id ?? null) : workspace.activePaneId,
+    }),
     focusTarget: closedActive ? (successor?.target ?? null) : null,
   };
 }
 
 export function resizeChatSplit(
-  layout: ChatPanesLayout,
-  splitId: string,
-  ratio: number,
-): ChatPanesLayout {
+  workspaces: ReadonlyArray<ChatWorkspace>,
+  input: { readonly workspaceId: string; readonly splitId: string; readonly ratio: number },
+): ReadonlyArray<ChatWorkspace> {
   const resize = (node: ChatPaneNode): ChatPaneNode => {
     if (node.kind === "pane") return node;
-    if (node.id === splitId) return node.ratio === ratio ? node : { ...node, ratio };
+    if (node.id === input.splitId) {
+      return node.ratio === input.ratio ? node : { ...node, ratio: input.ratio };
+    }
     const first = resize(node.children[0]);
     const second = resize(node.children[1]);
     return first === node.children[0] && second === node.children[1]
       ? node
       : { ...node, children: [first, second] };
   };
-  if (layout.root === null) return layout;
-  const root = resize(layout.root);
-  return root === layout.root ? layout : { ...layout, root };
+  let changed = false;
+  const next = workspaces.map((workspace) => {
+    if (workspace.id !== input.workspaceId) return workspace;
+    const root = resize(workspace.root);
+    changed = root !== workspace.root;
+    return changed ? { ...workspace, root } : workspace;
+  });
+  return changed ? next : workspaces;
 }
 
 /** Smallest pixel size at which every pane of `node` keeps its minimum. */
@@ -383,14 +457,14 @@ function isNode(value: unknown): value is ChatPaneNode {
   );
 }
 
-export function restoreChatPanesLayout(value: unknown): ChatPanesLayout {
-  if (typeof value !== "object" || value === null) return SINGLE_CHAT_PANE_LAYOUT;
-  const { root, activePaneId } = value as Record<string, unknown>;
-  if (!isNode(root) || root.kind !== "split") return SINGLE_CHAT_PANE_LAYOUT;
-  const layout: ChatPanesLayout = { root, activePaneId: null };
-  const panes = chatPaneList(layout);
-  if (panes.length > MAX_CHAT_PANES) return SINGLE_CHAT_PANE_LAYOUT;
+function restoreWorkspace(value: unknown): ChatWorkspace | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { id, root, activePaneId } = value as Record<string, unknown>;
+  if (typeof id !== "string" || !isNode(root) || root.kind !== "split") return null;
+  const panes = chatPaneList({ root, activePaneId: null });
+  if (panes.length > MAX_CHAT_PANES) return null;
   return {
+    id,
     root,
     activePaneId: panes.some((pane) => pane.id === activePaneId)
       ? (activePaneId as string)
@@ -398,9 +472,25 @@ export function restoreChatPanesLayout(value: unknown): ChatPanesLayout {
   };
 }
 
+/** Keeps well-formed workspaces; a thread already in an earlier one drops the later one. */
+export function restoreChatWorkspaces(value: unknown): ReadonlyArray<ChatWorkspace> {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const restored: ChatWorkspace[] = [];
+  for (const candidate of value) {
+    const workspace = restoreWorkspace(candidate);
+    if (workspace === null) continue;
+    const keys = chatPaneList(workspace).map((pane) => chatPaneTargetKey(pane.target));
+    if (keys.some((key) => seen.has(key))) continue;
+    for (const key of keys) seen.add(key);
+    restored.push(workspace);
+  }
+  return restored;
+}
+
 interface ChatPanesStoreState {
-  readonly layout: ChatPanesLayout;
-  /** Whether the chat area is large enough to render every pane of the split. */
+  readonly workspaces: ReadonlyArray<ChatWorkspace>;
+  /** Whether the chat area is large enough to render every pane of the shown workspace. */
   readonly splitFits: boolean;
   readonly setSplitFits: (splitFits: boolean) => void;
   readonly commit: (routeTarget: ThreadRouteTarget) => void;
@@ -409,58 +499,92 @@ interface ChatPanesStoreState {
     readonly target: ThreadRouteTarget;
     readonly edge?: ChatPaneEdge;
   }) => void;
+  /** False when nothing changed, such as a drop on a full workspace. */
+  readonly dropThread: (input: {
+    readonly paneTarget: ThreadRouteTarget;
+    readonly target: ThreadRouteTarget;
+    readonly edge: ChatPaneEdge;
+  }) => boolean;
   readonly dock: (input: {
-    readonly routeTarget: ThreadRouteTarget;
+    readonly workspaceId: string;
     readonly paneId: string;
     readonly targetPaneId: string;
     readonly edge: ChatPaneEdge;
   }) => void;
-  readonly resize: (splitId: string, ratio: number) => void;
+  readonly resize: (input: {
+    readonly workspaceId: string;
+    readonly splitId: string;
+    readonly ratio: number;
+  }) => void;
   /** Returns the thread to navigate to when the focused pane closed. */
-  readonly closePane: (paneId: string) => ThreadRouteTarget | null;
+  readonly closePane: (input: {
+    readonly workspaceId: string;
+    readonly paneId: string;
+  }) => ThreadRouteTarget | null;
+  readonly removeThread: (target: ThreadRouteTarget) => void;
+  /** Ungroups a workspace; its threads return to the sidebar list. */
+  readonly dissolve: (workspaceId: string) => void;
 }
 
 export const useChatPanesStore = create<ChatPanesStoreState>()(
   persist(
     (set, get) => ({
-      layout: SINGLE_CHAT_PANE_LAYOUT,
+      workspaces: [],
       splitFits: true,
       setSplitFits: (splitFits) =>
         set((state) => (state.splitFits === splitFits ? state : { splitFits })),
       commit: (routeTarget) =>
         set((state) => {
-          const layout = commitChatPanes(state.layout, routeTarget);
-          return layout === state.layout ? state : { layout };
+          const workspaces = commitChatPanes(state.workspaces, routeTarget);
+          return workspaces === state.workspaces ? state : { workspaces };
         }),
       openSplit: (input) =>
         set((state) => ({
-          layout: openChatSplit(state.layout, { ...input, createPaneId: randomUUID }),
+          workspaces: openChatSplit(state.workspaces, { ...input, createId: randomUUID }),
         })),
+      dropThread: (input) => {
+        const current = get().workspaces;
+        const workspaces = dropThreadOnChatPane(current, { ...input, createId: randomUUID });
+        if (workspaces === current) return false;
+        set({ workspaces });
+        return true;
+      },
       dock: (input) =>
         set((state) => ({
-          layout: dockChatPane(state.layout, { ...input, createSplitId: randomUUID }),
+          workspaces: dockChatPane(state.workspaces, { ...input, createSplitId: randomUUID }),
         })),
-      resize: (splitId, ratio) =>
+      resize: (input) =>
         set((state) => {
-          const layout = resizeChatSplit(state.layout, splitId, ratio);
-          return layout === state.layout ? state : { layout };
+          const workspaces = resizeChatSplit(state.workspaces, input);
+          return workspaces === state.workspaces ? state : { workspaces };
         }),
-      closePane: (paneId) => {
-        const result = closeChatPane(get().layout, paneId);
-        set({ layout: result.layout });
+      closePane: (input) => {
+        const result = closeChatPane(get().workspaces, input);
+        set({ workspaces: result.workspaces });
         return result.focusTarget;
       },
+      removeThread: (target) =>
+        set((state) => {
+          const workspaces = removeThreadFromWorkspaces(state.workspaces, target);
+          return workspaces === state.workspaces ? state : { workspaces };
+        }),
+      dissolve: (workspaceId) =>
+        set((state) => ({
+          workspaces: state.workspaces.filter((workspace) => workspace.id !== workspaceId),
+        })),
     }),
     {
-      name: "t3code:chat-panes:v1",
+      name: "t3code:chat-workspaces:v1",
       storage: createJSONStorage(() =>
         resolveStorage(typeof window !== "undefined" ? window.localStorage : undefined),
       ),
       version: 1,
-      partialize: (state) => ({ layout: state.layout }),
+      partialize: (state) => ({ workspaces: state.workspaces }),
       merge: (persisted, current) => ({
         ...current,
-        layout: restoreChatPanesLayout((persisted as { layout?: unknown } | null)?.layout),
+        workspaces: restoreChatWorkspaces(
+          (persisted as { workspaces?: unknown } | null)?.workspaces,
+        ),
       }),
     },
   ),

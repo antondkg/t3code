@@ -4,6 +4,7 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
 export type ThreadActionMenuId =
   | "open-in-split"
   | "open-in-split-below"
+  | "remove-from-workspace"
   | "find"
   | "new-thread-on-branch"
   | "filter-by-project"
@@ -99,6 +100,8 @@ export interface ThreadActionMenuState {
   readonly canTurnIntoProject?: boolean;
   /** Another thread is open, so this one can show beside it. */
   readonly canOpenInSplit?: boolean;
+  /** Tiled in a workspace, so it can leave it. */
+  readonly inWorkspace?: boolean;
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
@@ -106,6 +109,7 @@ export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean
   return ![
     "open-in-split",
     "open-in-split-below",
+    "remove-from-workspace",
     "find",
     "new-thread-on-branch",
     "project-settings",
@@ -128,6 +132,9 @@ export function buildThreadActionMenuItems(
           { id: "open-in-split" as const, label: "Open in split", icon: "columns-2" },
           { id: "open-in-split-below" as const, label: "Open in split below", icon: "rows-2" },
         ]
+      : []),
+    ...(state.inWorkspace
+      ? [{ id: "remove-from-workspace" as const, label: "Remove from workspace", icon: "x" }]
       : []),
     ...(state.canFind
       ? [{ id: "find" as const, label: "Find in thread", icon: "text-search" }]
