@@ -272,6 +272,11 @@ it.effect(
       const original = message("native-message", "full native history");
       let snapshot: NativeHistorySnapshot = {
         sourceRevision: "revision-1",
+        modelSelection: {
+          instanceId,
+          model: "claude-agent/opus",
+          options: [{ id: "variant", value: "high" }],
+        },
         turns: [
           {
             nativeTurnId: "native-message",
@@ -344,6 +349,7 @@ it.effect(
       );
       assert.equal(after.providerThreads[0]!.nativeThreadRef!.nativeId, "ses_native");
       assert.equal(after.thread.settledOverride, null);
+      assert.deepEqual(after.thread.modelSelection, snapshot.modelSelection);
       const config = yield* ServerConfig.ServerConfig;
       const fs = yield* FileSystem.FileSystem;
       const attachment = after.messages.find((row) => row.id === original.id)!.attachments[0]!;
