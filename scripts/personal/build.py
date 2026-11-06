@@ -96,6 +96,8 @@ if actual_version != f"v{node_version}":
 ENV["PATH"] = str(node.parent) + os.pathsep + ENV["PATH"]
 if args.target == "desktop":
     ENV["RUSTUP_TOOLCHAIN"] = RELEASE["rustToolchain"]
+    ENV["SDKROOT"] = subprocess.check_output(
+        ["xcrun", "--sdk", "macosx", "--show-sdk-path"], text=True).strip()
 # These are public vendor settings, not credentials; private overrides stay in ignored env files.
 for line in (ROOT / ".env.example").read_text().splitlines():
     key, separator, value = line.partition("=")
