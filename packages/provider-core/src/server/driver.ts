@@ -93,6 +93,8 @@ export interface NativeHistorySnapshot {
   readonly sourceRevision: string;
   readonly turns: ReadonlyArray<{
     readonly nativeTurnId: string;
+    readonly nativeMessageIds: ReadonlyArray<string>;
+    readonly nativeToolIds: ReadonlyArray<string>;
     readonly messages: ReadonlyArray<OrchestrationV2ConversationMessage>;
     readonly turnItems: ReadonlyArray<OrchestrationV2TurnItem>;
   }>;

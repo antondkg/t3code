@@ -1,3 +1,4 @@
+export { nativeSourceMessageId } from "./nativeHistoryIdentity.ts";
 // @effect-diagnostics nodeBuiltinImport:off
 
 import {
