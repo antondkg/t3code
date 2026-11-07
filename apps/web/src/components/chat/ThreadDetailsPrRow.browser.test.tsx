@@ -53,6 +53,7 @@ const queryData = () => ({
   changedFiles: 1,
   additions: 1,
   deletions: 0,
+  labels: [],
   checks: [state.status, ...(state.extraStatus ? [state.extraStatus] : [])].map((status) => ({
     name: `CI-${status}`,
     status,

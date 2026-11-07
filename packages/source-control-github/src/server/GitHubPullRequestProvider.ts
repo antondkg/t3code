@@ -6,6 +6,8 @@ import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as Hash from "effect/Hash";
 import * as Effect from "effect/Effect";
+
+import { previewConventionFor } from "./previewDeploys.ts";
 import type {
   PullRequestActor,
   PullRequestCapabilities,
@@ -483,6 +485,14 @@ export const make = Effect.gen(function* () {
           ...(summary.author === undefined
             ? {}
             : { author: withAvatar(summary.author, new Map(), input.host) }),
+          ...(summary.latestReviews === undefined
+            ? {}
+            : {
+                latestReviews: summary.latestReviews.map((review) => ({
+                  ...review,
+                  reviewer: withAvatar(review.reviewer, new Map(), input.host) ?? review.reviewer,
+                })),
+              }),
         })),
         Effect.mapError(fail("getChangeRequestSummary")),
       ),
@@ -507,7 +517,21 @@ export const make = Effect.gen(function* () {
       ),
 
     getChangeRequest: (input) =>
-      readChecks(input).pipe(
+      Effect.all(
+        [
+          readChecks(input),
+          // A preview is extra: a failed read of it leaves the pull request readable.
+          previewConventionFor(input.repository) === undefined
+            ? Effect.succeed([])
+            : cli.getPreviewDeployments(input).pipe(Effect.orElseSucceed(() => [])),
+        ],
+        { concurrency: 2 },
+      ).pipe(
+        Effect.map(([pullRequest, previews]) =>
+          previews.length === 0
+            ? pullRequest
+            : { ...pullRequest, deployments: [...previews, ...(pullRequest.deployments ?? [])] },
+        ),
         Effect.map((pullRequest): ProviderChangeRequestDetail => ({
           ...pullRequest,
           author: withAvatar(pullRequest.author, new Map<string, string>(), input.host),

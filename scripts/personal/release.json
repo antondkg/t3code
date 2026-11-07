@@ -21,6 +21,12 @@
       "head": "b69afe0fa85d268fd81a516338a6f164937221f7",
       "summary": "Tiled chats: up to six panes split right or below, resizable, movable and persisted, built on #30868's split view.",
       "retireWhen": "Upstream ships workspace panes (redesign #28845) or merges #30868."
+    },
+    {
+      "pullRequest": null,
+      "head": null,
+      "summary": "Preview deploy status, Graphite links and stack approval on linked pull requests; gt submit links every stack layer.",
+      "retireWhen": "Upstream shows deployments and Graphite stacks on linked pull requests."
     }
   ],
   "linuxRuntimeSha256": "cd2a3a82479d4a21e27050b138a7569d601a91a70d4a98c183df2881ef0e6eb0",

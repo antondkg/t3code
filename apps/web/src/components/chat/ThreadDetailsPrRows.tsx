@@ -13,7 +13,7 @@ import {
   threadPullRequestKeyOf,
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronUpIcon, CircleCheckIcon, LayersIcon } from "lucide-react";
 import { useState, type ComponentProps, type MouseEvent as ReactMouseEvent } from "react";
 
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
@@ -27,6 +27,7 @@ import { useProjects, useQuietThreadShell } from "~/state/entities";
 import { threadEnvironment } from "~/state/threads";
 import { useAtomCommand } from "~/state/use-atom-command";
 
+import { cn } from "~/lib/utils";
 import { useOpenPrLink } from "../../lib/openPullRequestLink";
 import {
   linkedPullRequestSnapshotStatus,
@@ -34,18 +35,26 @@ import {
   useThreadDisplayedPullRequest,
 } from "../ThreadStatusIndicators";
 
+import {
+  resolveStackApproval,
+  resolveStackBaseLayer,
+} from "../pullRequest/pullRequestDeploy.logic";
 import { ThreadDetailsPrRow } from "./ThreadDetailsPrRow";
 
 function ThreadDetailsPrLinkRow({
   environmentId,
+  threadRef,
   link,
   onOpen,
   onActed,
   onStopWatching,
   composerTarget,
+  stackBase,
 }: {
   environmentId: EnvironmentId;
+  threadRef: ScopedThreadRef;
   link: ThreadPullRequestLink;
+  stackBase: ThreadPullRequestLink | null;
   onOpen: (event: ReactMouseEvent<HTMLElement>) => void;
   onActed?: (() => void) | undefined;
   onStopWatching?: (() => void) | undefined;
@@ -65,6 +74,7 @@ function ThreadDetailsPrLinkRow({
   return (
     <ThreadDetailsPrRow
       environmentId={environmentId}
+      threadRef={threadRef}
       pr={pr}
       number={link.number}
       reference={link}
@@ -75,6 +85,8 @@ function ThreadDetailsPrLinkRow({
       onOpen={onOpen}
       onStopWatching={onStopWatching}
       composerTarget={composerTarget}
+      stackBase={stackBase}
+      reviewDecision={link.snapshot?.reviewDecision}
       {...(onActed ? { onActed } : {})}
     />
   );
@@ -108,11 +120,24 @@ function ThreadDetailsPrRows({
               watching: false,
             },
           });
-  const currentRow = <ThreadDetailsPrRow {...row} onStopWatching={stopWatching(currentLink)} />;
+  const chains = resolveThreadPullRequestChains(visibleThreadPullRequests(links));
+  const approval = currentLink === null ? null : resolveStackApproval(chains, currentLink);
+  const currentRow = (
+    <>
+      <ThreadDetailsPrRow
+        {...row}
+        threadRef={threadRef}
+        onStopWatching={stopWatching(currentLink)}
+        stackBase={currentLink === null ? null : resolveStackBaseLayer(chains, currentLink)}
+        reviewDecision={currentLink?.snapshot?.reviewDecision}
+      />
+      {approval === null ? null : <StackApprovalLine {...approval} />}
+    </>
+  );
   const rest =
     currentLink === null
       ? []
-      : pipe(visibleThreadPullRequests(links), resolveThreadPullRequestChains, pullRequestListLines)
+      : pipe(chains, pullRequestListLines)
           .map((line) => line.link)
           .filter((link) => threadPullRequestKeyOf(link) !== threadPullRequestKeyOf(currentLink));
   if (rest.length === 0) return currentRow;
@@ -126,11 +151,13 @@ function ThreadDetailsPrRows({
             <ThreadDetailsPrLinkRow
               key={threadPullRequestKeyOf(link)}
               environmentId={row.environmentId}
+              threadRef={threadRef}
               link={link}
               onOpen={(event) => onOpenLink(event, link.url)}
               onActed={row.onActed}
               onStopWatching={stopWatching(link)}
               composerTarget={row.composerTarget}
+              stackBase={resolveStackBaseLayer(chains, link)}
             />
           ))}
         </div>
@@ -212,5 +239,28 @@ export function ThreadDetailsThreadPrRows({
       composerTarget={composerTarget}
       {...(onActed ? { onActed } : {})}
     />
+  );
+}
+
+/** Whether every open layer of the stack is approved, the cue that it can merge from the bottom. */
+function StackApprovalLine({ open, approved }: { open: number; approved: number }) {
+  const all = approved === open;
+  return (
+    <div
+      data-thread-details-stack-approval
+      className={cn(
+        "flex h-6 min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap ps-9 pe-2.5 text-xs",
+        all ? "font-medium text-success-foreground" : "text-muted-foreground",
+      )}
+    >
+      {all ? (
+        <CircleCheckIcon aria-hidden className="size-3.5 shrink-0" />
+      ) : (
+        <LayersIcon aria-hidden className="size-3.5 shrink-0" />
+      )}
+      <span className="truncate">
+        {all ? `Stack approved (${open}/${open})` : `Stack: ${approved}/${open} approved`}
+      </span>
+    </div>
   );
 }

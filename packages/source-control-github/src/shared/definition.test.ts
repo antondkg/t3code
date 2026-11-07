@@ -21,6 +21,16 @@ describe("GitHub change request URLs", () => {
     });
   });
 
+  it("reads a Graphite pull request URL as its github.com pull request", () => {
+    expect(parse("https://app.graphite.com/github/pr/BoardAI/vallor/9387?ref=x")).toEqual({
+      host: "github.com",
+      repository: "boardai/vallor",
+      number: 9387,
+      repositoryUrl: "https://github.com/boardai/vallor",
+    });
+    expect(parse("https://app.graphite.com/github/pr/BoardAI/vallor")).toBeNull();
+  });
+
   it("claims only the two-segment pull route", () => {
     for (const url of [
       "https://github.com/t3tools/t3code/issues/123",
