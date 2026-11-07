@@ -174,6 +174,41 @@ export function changeRequestsCreatedBy(input: string, output: string) {
   return created.size > creates ? [] : [...created.values()];
 }
 
+const STACK_SUBMIT_COMMANDS = sourceControlDefinitions.definitions.flatMap(
+  ({ kind, changeRequestStackSubmitCommand: command }) =>
+    command === undefined
+      ? []
+      : [
+          {
+            kind,
+            command,
+            run: new RegExp(`${COMMAND_START}${command.source}(?=$|[\\s;&|)])`, "gu"),
+          },
+        ],
+);
+const OUTPUT_URL = /https?:\/\/[^\s<>"'`)\]]+/gu;
+
+/**
+ * The change requests a stack submit, such as `gt submit --stack`, printed. It prints one URL per
+ * layer, beside the branch name, and every layer belongs to the stack the thread works on.
+ */
+function changeRequestsSubmittedBy(input: string, output: string) {
+  if (!STACK_SUBMIT_COMMANDS.some(({ command }) => command.test(input))) return [];
+  const code = shellCode(shellScript(input));
+  const submitters = new Set(
+    STACK_SUBMIT_COMMANDS.filter(({ run }) => code.match(run) !== null).map(({ kind }) => kind),
+  );
+  if (submitters.size === 0) return [];
+  const submitted = new Map<string, ThreadPullRequestKey & { readonly url: string }>();
+  for (const [url] of output.matchAll(OUTPUT_URL)) {
+    const parsed = sourceControlDefinitions.parseChangeRequestUrl(url);
+    if (parsed === null || !submitters.has(parsed.definition.kind)) continue;
+    const key = normalizeThreadPullRequestKey(parsed.link);
+    submitted.set(threadPullRequestKeyOf(key), { ...key, url });
+  }
+  return [...submitted.values()];
+}
+
 const isPullRequestProviderError = Schema.is(PullRequestProviderError);
 
 type SnapshotFields = Omit<ThreadPullRequestSnapshot, "syncedAt">;
@@ -649,8 +684,14 @@ export const make = Effect.gen(function* () {
   const linkCreatedChangeRequests = Effect.fn("PullRequestSyncReactor.linkCreatedChangeRequests")(
     function* (threadId: ThreadId, item: CommandExecution) {
       if (isOrchestrationV2WorkActive(item.status)) return;
+      const created = new Map(
+        [
+          ...changeRequestsCreatedBy(item.input, item.output ?? ""),
+          ...changeRequestsSubmittedBy(item.input, item.output ?? ""),
+        ].map((key) => [threadPullRequestKeyOf(key), key] as const),
+      );
       yield* Effect.forEach(
-        changeRequestsCreatedBy(item.input, item.output ?? ""),
+        created.values(),
         (created) =>
           engine
             .dispatch({

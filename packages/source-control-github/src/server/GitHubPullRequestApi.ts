@@ -43,6 +43,7 @@ import {
   type PullRequestThreadCommentsResult,
   type PullRequestUpdateMethod,
   type PullRequestPreview,
+  type PullRequestDeployment,
 } from "@t3tools/contracts";
 
 import * as GitHubAppAccess from "./GitHubAppAccess.ts";
@@ -55,6 +56,11 @@ import {
   type PullRequestActionSummary,
 } from "./pullRequestMutations.graphql.ts";
 import { PullRequestReadsGraphQLGroup } from "./pullRequestReads.graphql.ts";
+import {
+  decodePreviewRunsJson,
+  previewConventionFor,
+  previewDeploymentsFromRuns,
+} from "./previewDeploys.ts";
 import { PullRequestReviewsGraphQLGroup } from "./pullRequestReviews.graphql.ts";
 import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
@@ -511,6 +517,14 @@ export class GitHubPullRequestApi extends Context.Service<
       readonly headRepositoryOwner: string;
       readonly isCrossRepository: true;
     }) => Effect.Effect<ReadonlyArray<GitHubWorkflowRunApproval>, GitHubPullRequestApiError>;
+
+    /** Previews a repository's deploy workflow ran for the pull request; empty for most repositories. */
+    readonly getPreviewDeployments: (input: {
+      readonly cwd: string;
+      readonly repository: string;
+      readonly host: string;
+      readonly number: number;
+    }) => Effect.Effect<ReadonlyArray<PullRequestDeployment>, GitHubPullRequestApiError>;
 
     readonly getPullRequestStack: (input: {
       readonly cwd: string;
@@ -2035,6 +2049,25 @@ export const make = Effect.gen(function* () {
       },
     ),
     listWorkflowRunsRequiringApproval,
+
+    getPreviewDeployments: Effect.fn("GitHubPullRequestApi.getPreviewDeployments")(
+      function (input) {
+        const convention = previewConventionFor(input.repository);
+        if (convention === undefined || input.host !== "github.com") return Effect.succeed([]);
+        const { owner, name } = parseRepositorySelector(input.repository);
+        const stage = convention.stage(input.number);
+        // Read with each detail refresh, so revalidate it; an unchanged list costs nothing.
+        return revalidatedRestRead({
+          cwd: input.cwd,
+          host: input.host,
+          operation: "getPreviewDeployments",
+          path: `repos/${owner}/${name}/actions/workflows/${convention.workflow}/runs?per_page=100`,
+          decode: decodePreviewRunsJson,
+        }).pipe(
+          Effect.map((runs) => previewDeploymentsFromRuns(runs, stage, convention.url(stage))),
+        );
+      },
+    ),
 
     getPullRequestStack: Effect.fn("GitHubPullRequestApi.getPullRequestStack")(function (input) {
       const { owner, name } = parseRepositorySelector(input.repository);

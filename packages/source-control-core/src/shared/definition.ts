@@ -280,6 +280,11 @@ export interface SourceControlDefinition {
    * on a line of its own. Absent for a host with no such CLI.
    */
   readonly changeRequestCreateCommand?: RegExp;
+  /**
+   * Matches a shell command that submits a stack of change requests, such as Graphite's
+   * `gt submit`, and prints a URL for each one it creates or updates. Absent for no such CLI.
+   */
+  readonly changeRequestStackSubmitCommand?: RegExp;
   readonly authorProfileUrl: (login: string, repositoryUrl: string) => string | null;
   /**
    * The references this host's own renderer links in plain text, such as `#12` or a commit SHA,

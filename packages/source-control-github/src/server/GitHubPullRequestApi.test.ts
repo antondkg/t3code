@@ -90,6 +90,7 @@ const coreResponse = (pullRequest: Readonly<Record<string, unknown>> = {}) => ({
         baseRef: { compare: { behindBy: 2 } },
         reviewRequests: { nodes: [] },
         labels: { nodes: [] },
+        deployedEvents: { nodes: [] },
         commits: { nodes: [] },
         ...pullRequest,
       },
@@ -544,6 +545,7 @@ const checkRun = (fields: Record<string, unknown>) => ({
   startedAt: null,
   completedAt: null,
   detailsUrl: null,
+  title: null,
   checkSuite: { workflowRun: null },
   ...fields,
 });

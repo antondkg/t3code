@@ -15,6 +15,7 @@ export function PullRequestDetailHeaderBody({
   head,
   files,
   diffStat,
+  links,
 }: {
   title: ReactNode;
   author: ReactNode;
@@ -24,6 +25,8 @@ export function PullRequestDetailHeaderBody({
   head: ReactNode;
   files: ReactNode;
   diffStat: ReactNode;
+  /** Links beside the branches, such as a preview deploy. */
+  links?: ReactNode;
 }) {
   return (
     <div className="col-span-2 mt-1 min-w-0 px-4 pb-4">
@@ -52,6 +55,11 @@ export function PullRequestDetailHeaderBody({
           {diffStat}
         </span>
       </div>
+      {links === undefined ? null : (
+        <div className="mt-2 -ms-2 flex min-h-6 min-w-0 flex-wrap items-center gap-1 text-xs empty:hidden">
+          {links}
+        </div>
+      )}
     </div>
   );
 }

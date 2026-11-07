@@ -145,6 +145,7 @@ import {
 } from "./pullRequestDetail.logic";
 import { resolvePickableEnvironments } from "./pullRequestProjectAssignment.logic";
 import { PullRequestChecksPopover } from "./PullRequestChecksPopover";
+import { PullRequestDeployLinks } from "./PullRequestDeployLinks";
 import {
   PullRequestActorLabel,
   PullRequestMetaLine,
@@ -1564,6 +1565,7 @@ export function PullRequestDetailPanel({
                     copiedLabel="Branch name copied"
                   />
                 }
+                links={<PullRequestDeployLinks detail={detail} threadRef={threadRef} />}
                 files={`${detail.changedFiles.toLocaleString()} ${detail.changedFiles === 1 ? "file" : "files"}`}
                 diffStat={
                   <PullRequestChangeBreakdownStat

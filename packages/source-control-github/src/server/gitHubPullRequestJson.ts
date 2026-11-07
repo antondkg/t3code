@@ -10,6 +10,8 @@ import type {
   PullRequestReferenceCandidate,
   PullRequestPreview,
   PullRequestCheck,
+  PullRequestDeployment,
+  PullRequestDeploymentState,
   PullRequestCheckStatus,
   PullRequestChecksState,
   PullRequestComment,
@@ -1007,7 +1009,51 @@ export function toPullRequestWatchFingerprint(
   };
 }
 
+const DEPLOYMENT_STATE: Readonly<Record<string, PullRequestDeploymentState>> = {
+  SUCCESS: "success",
+  ACTIVE: "success",
+  PENDING: "pending",
+  QUEUED: "pending",
+  IN_PROGRESS: "pending",
+  WAITING: "pending",
+  ERROR: "failure",
+  FAILURE: "failure",
+  INACTIVE: "inactive",
+  DESTROYED: "inactive",
+  ABANDONED: "inactive",
+};
+
+type CoreDeployedEvents = NonNullable<
+  NonNullable<PullRequestCore.Result["repository"]>["pullRequest"]
+>["deployedEvents"];
+
+/** The newest status of each environment deployed for the pull request, newest first. */
+export function toDeployments(raw: CoreDeployedEvents): ReadonlyArray<PullRequestDeployment> {
+  const byEnvironment = new Map<string, PullRequestDeployment>();
+  for (const event of nodesOf(raw)) {
+    if (event.__typename !== "DeployedEvent") continue;
+    const node = event.deployment;
+    const environment = trimmed(node.environment);
+    const state = DEPLOYMENT_STATE[node.latestStatus?.state ?? node.state ?? ""];
+    if (environment === null || state === undefined) continue;
+    const deployment: PullRequestDeployment = {
+      environment,
+      state,
+      url: trimmed(node.latestStatus?.environmentUrl),
+      logUrl: trimmed(node.latestStatus?.logUrl),
+      commitSha: trimmed(node.commitOid),
+      updatedAt: node.latestStatus?.updatedAt ?? node.updatedAt,
+    };
+    const previous = byEnvironment.get(environment);
+    if (previous === undefined || previous.updatedAt < deployment.updatedAt) {
+      byEnvironment.set(environment, deployment);
+    }
+  }
+  return [...byEnvironment.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 export interface GitHubPullRequestCore extends GitHubPullRequestDetail {
+  readonly deployments?: ReadonlyArray<PullRequestDeployment>;
   readonly maintainerCanModify: boolean;
   readonly canEditMaintainerEdits: boolean;
   readonly reviewRequestTeams: ReadonlyArray<PullRequestActor>;
@@ -1028,6 +1074,7 @@ export function toPullRequestCore(result: PullRequestCore.Result): GitHubPullReq
   if (repository == null || pr == null) return null;
   const contexts = nodesOf(pr.commits)[0]?.commit.statusCheckRollup?.contexts;
   return {
+    deployments: toDeployments(pr.deployedEvents),
     reviewRequestTeams: nodesOf(pr.reviewRequests).flatMap(
       ({ requestedReviewer }) => toRequestedTeam(requestedReviewer) ?? [],
     ),
@@ -1185,7 +1232,11 @@ export type GitHubCheckContext = CheckFields;
 function toCheckContexts(nodes: ReadonlyArray<CheckContext>): ReadonlyArray<GitHubCheckContext> {
   return nodes.map((check) =>
     check.__typename === "CheckRun"
-      ? { ...check, workflowName: check.checkSuite.workflowRun?.workflow.name ?? null }
+      ? {
+          ...check,
+          description: check.title,
+          workflowName: check.checkSuite.workflowRun?.workflow.name ?? null,
+        }
       : check,
   );
 }

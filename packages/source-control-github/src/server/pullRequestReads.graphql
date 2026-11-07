@@ -34,6 +34,8 @@ fragment CheckContext on StatusCheckRollupContext {
   }
   ... on CheckRun {
     name
+    # A workflow's own one-line result, such as "Deploy check skipped".
+    title
     status
     conclusion
     startedAt
@@ -144,6 +146,26 @@ query PullRequestCore(
         nodes {
           name
           color
+        }
+      }
+      # Deploys GitHub recorded on the pull request. They outlive force pushes, which a stacking
+      # tool's restack does, so a preview stage deployed from an earlier head is still found.
+      deployedEvents: timelineItems(itemTypes: [DEPLOYED_EVENT], last: 25) {
+        nodes {
+          ... on DeployedEvent {
+            deployment {
+              environment
+              state
+              commitOid
+              updatedAt
+              latestStatus {
+                state
+                environmentUrl
+                logUrl
+                updatedAt
+              }
+            }
+          }
         }
       }
       commits(last: 1) {

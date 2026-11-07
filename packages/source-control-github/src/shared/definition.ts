@@ -26,6 +26,16 @@ const CHANGE_REQUEST_REFERENCE =
 const CHANGE_REQUEST_PATH = /^\/([^/]+\/[^/]+)\/pull\/(\d+)(?:\/|$)/u;
 const COMMIT_PATH = /^\/([^/]+\/[^/]+)\/(?:commit|pull\/\d+\/commits)\/([0-9a-f]+)\/?$/iu;
 const ISSUE_PATH = /^\/([^/]+\/[^/]+)\/issues\/(\d+)(?:\/|$)/u;
+// Graphite, a stacking tool for GitHub, names a pull request `/github/pr/<owner>/<repo>/<n>`.
+const GRAPHITE_HOST = "app.graphite.com";
+const GRAPHITE_PATH = /^\/github\/pr\/([^/]+\/[^/]+)\/(\d+)(?:\/|$)/u;
+
+function parseGraphiteUrl(url: URL) {
+  const parsed = parseChangeRequestPath(url, GRAPHITE_PATH);
+  return parsed === null
+    ? null
+    : { ...parsed, host: "github.com", repositoryUrl: `https://github.com/${parsed.repository}` };
+}
 
 const KIND = SourceControlProviderKind.make("github");
 
@@ -97,7 +107,10 @@ export const definition = defineSourceControl({
   // A known project's host can be any GitHub Enterprise Server name.
   parseCommitUrl: (url, known) =>
     known || isGitHubHost(url.hostname) ? parseCommitPath(url, COMMIT_PATH) : null,
-  parseChangeRequestUrl: (url) => parseChangeRequestPath(url, CHANGE_REQUEST_PATH),
+  parseChangeRequestUrl: (url) =>
+    url.hostname.toLowerCase() === GRAPHITE_HOST
+      ? parseGraphiteUrl(url)
+      : parseChangeRequestPath(url, CHANGE_REQUEST_PATH),
   // GitHub writes every bare reference through `/issues/`, including pull requests.
   changeRequestUrlFromReferenceAutolink: (url) => {
     const match = isGitHubHost(url.hostname) ? ISSUE_PATH.exec(url.pathname) : null;
@@ -120,8 +133,9 @@ export const definition = defineSourceControl({
     "approve-workflows",
   ] as const),
   checkoutCommand: ({ number }) => `gh pr checkout ${number}`,
-  changeRequestCloseCommand: /\bgh\s+(?:pr\s+(?:merge|close)|stack\s+merge)\b/u,
+  changeRequestCloseCommand: /\b(?:gh\s+(?:pr\s+(?:merge|close)|stack\s+merge)|gt\s+merge)\b/u,
   changeRequestCreateCommand: /\bgh\s+pr\s+create\b/u,
+  changeRequestStackSubmitCommand: /\bgt\s+(?:submit|ss|(?:stack|upstack|downstack)\s+submit)\b/u,
   authorProfileUrl: (login, repositoryUrl) =>
     login.endsWith("[bot]")
       ? null

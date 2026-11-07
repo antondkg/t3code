@@ -8,6 +8,7 @@ import {
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
 import { ChevronDown, ChevronUp } from "lucide";
+import { CircleCheckIcon, LayersIcon } from "lucide-react";
 import { useState, type ComponentProps, type MouseEvent as ReactMouseEvent } from "react";
 
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
@@ -18,19 +19,28 @@ import { threadEnvironment } from "~/state/threads";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { MorphIcon } from "~/components/MorphIcon";
+import { cn } from "~/lib/utils";
 import { linkedPullRequestSnapshotStatus, prStatusIndicator } from "../ThreadStatusIndicators";
 
+import {
+  resolveStackApproval,
+  resolveStackBaseLayer,
+} from "../pullRequest/pullRequestDeploy.logic";
 import { ThreadDetailsPrRow } from "./ThreadDetailsPrRow";
 
 function ThreadDetailsPrLinkRow({
   environmentId,
+  threadRef,
   link,
   onOpen,
   onActed,
   onStopWatching,
+  stackBase,
 }: {
   environmentId: EnvironmentId;
+  threadRef: ScopedThreadRef;
   link: ThreadPullRequestLink;
+  stackBase: ThreadPullRequestLink | null;
   onOpen: (event: ReactMouseEvent<HTMLElement>) => void;
   onActed?: (() => void) | undefined;
   onStopWatching?: (() => void) | undefined;
@@ -49,6 +59,7 @@ function ThreadDetailsPrLinkRow({
   return (
     <ThreadDetailsPrRow
       environmentId={environmentId}
+      threadRef={threadRef}
       pr={pr}
       number={link.number}
       reference={link}
@@ -58,6 +69,8 @@ function ThreadDetailsPrLinkRow({
       openAriaLabel={link.url}
       onOpen={onOpen}
       onStopWatching={onStopWatching}
+      stackBase={stackBase}
+      reviewDecision={link.snapshot?.reviewDecision}
       {...(onActed ? { onActed } : {})}
     />
   );
@@ -91,11 +104,24 @@ export function ThreadDetailsPrRows({
               watching: false,
             },
           });
-  const currentRow = <ThreadDetailsPrRow {...row} onStopWatching={stopWatching(currentLink)} />;
+  const chains = resolveThreadPullRequestChains(visibleThreadPullRequests(links));
+  const approval = currentLink === null ? null : resolveStackApproval(chains, currentLink);
+  const currentRow = (
+    <>
+      <ThreadDetailsPrRow
+        {...row}
+        threadRef={threadRef}
+        onStopWatching={stopWatching(currentLink)}
+        stackBase={currentLink === null ? null : resolveStackBaseLayer(chains, currentLink)}
+        reviewDecision={currentLink?.snapshot?.reviewDecision}
+      />
+      {approval === null ? null : <StackApprovalLine {...approval} />}
+    </>
+  );
   const rest =
     currentLink === null
       ? []
-      : pipe(visibleThreadPullRequests(links), resolveThreadPullRequestChains, pullRequestListLines)
+      : pipe(chains, pullRequestListLines)
           .map((line) => line.link)
           .filter((link) => threadPullRequestKeyOf(link) !== threadPullRequestKeyOf(currentLink));
   if (rest.length === 0) return currentRow;
@@ -109,10 +135,12 @@ export function ThreadDetailsPrRows({
             <ThreadDetailsPrLinkRow
               key={threadPullRequestKeyOf(link)}
               environmentId={row.environmentId}
+              threadRef={threadRef}
               link={link}
               onOpen={(event) => onOpenLink(event, link.url)}
               onActed={row.onActed}
               onStopWatching={stopWatching(link)}
+              stackBase={resolveStackBaseLayer(chains, link)}
             />
           ))}
         </div>
@@ -134,5 +162,28 @@ export function ThreadDetailsPrRows({
         {expanded ? "Show less" : `Show ${rest.length} more`}
       </ThreadDetailsControl>
     </>
+  );
+}
+
+/** Whether every open layer of the stack is approved, the cue that it can merge from the bottom. */
+function StackApprovalLine({ open, approved }: { open: number; approved: number }) {
+  const all = approved === open;
+  return (
+    <div
+      data-thread-details-stack-approval
+      className={cn(
+        "flex h-6 min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap ps-9 pe-2.5 text-xs",
+        all ? "font-medium text-success-foreground" : "text-muted-foreground",
+      )}
+    >
+      {all ? (
+        <CircleCheckIcon aria-hidden className="size-3.5 shrink-0" />
+      ) : (
+        <LayersIcon aria-hidden className="size-3.5 shrink-0" />
+      )}
+      <span className="truncate">
+        {all ? `Stack approved (${open}/${open})` : `Stack: ${approved}/${open} approved`}
+      </span>
+    </div>
   );
 }

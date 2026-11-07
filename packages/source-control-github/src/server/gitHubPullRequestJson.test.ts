@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  toDeployments,
   buildReviewSubmission,
   buildReviewerRequest,
   pullRequestLookup,
@@ -322,6 +323,7 @@ describe("pull request detail decoding", () => {
           startedAt: null,
           completedAt: null,
           detailsUrl: null,
+          title: null,
           checkSuite: { workflowRun: null },
           ...fields,
         };
@@ -376,6 +378,7 @@ describe("pull request detail decoding", () => {
             baseRef: null,
             reviewRequests: { nodes: [] },
             labels: { nodes: [] },
+            deployedEvents: { nodes: [] },
             commits: {
               nodes: [
                 {
@@ -621,6 +624,54 @@ describe("pull request detail decoding", () => {
       expect(detail.comments.map((comment) => comment.id)).toContain("r6");
     },
   );
+});
+
+describe("deployment decoding", () => {
+  it("keeps each environment's newest deploy on the pull request, newest first", () => {
+    const deployed = (
+      environment: string,
+      state: string,
+      updatedAt: string,
+      environmentUrl: string | null,
+      commitOid = "ceea101",
+    ) => ({
+      __typename: "DeployedEvent",
+      deployment: {
+        environment,
+        state,
+        commitOid,
+        updatedAt,
+        latestStatus: { state, environmentUrl, logUrl: null, updatedAt },
+      },
+    });
+    expect(
+      toDeployments({
+        nodes: [
+          deployed("pr8735", "INACTIVE", "2026-11-01T00:00:00Z", null),
+          deployed("pr8735", "SUCCESS", "2026-11-02T00:00:00Z", "https://pr8735.sandbox.vallor.ai"),
+          deployed("production", "IN_PROGRESS", "2026-11-03T00:00:00Z", null, "4d73035"),
+          null,
+        ],
+      } as Parameters<typeof toDeployments>[0]),
+    ).toEqual([
+      {
+        environment: "production",
+        state: "pending",
+        url: null,
+        logUrl: null,
+        commitSha: "4d73035",
+        updatedAt: "2026-11-03T00:00:00Z",
+      },
+      {
+        environment: "pr8735",
+        state: "success",
+        url: "https://pr8735.sandbox.vallor.ai",
+        logUrl: null,
+        commitSha: "ceea101",
+        updatedAt: "2026-11-02T00:00:00Z",
+      },
+    ]);
+  });
 });
 
 describe("review thread decoding", () => {

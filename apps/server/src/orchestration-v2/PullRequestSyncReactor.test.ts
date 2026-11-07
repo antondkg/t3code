@@ -1800,6 +1800,22 @@ describe("PullRequestSyncReactor", () => {
       output: "https://github.com/owner/repository/pull/120",
       linked: [],
     },
+    {
+      name: "every layer a Graphite stack submit printed",
+      input: "gt submit --stack --no-edit --publish",
+      output: [
+        "🥞 Pushed branch 11-05-feat_a",
+        "11-05-feat_a: https://app.graphite.com/github/pr/owner/repository/124 (updated)",
+        "11-05-feat_b: https://app.graphite.com/github/pr/owner/repository/125 (created)",
+      ].join("\n"),
+      linked: [124, 125],
+    },
+    {
+      name: "a Graphite submit only in quoted text",
+      input: "echo 'run gt submit next' && gt log",
+      output: "https://app.graphite.com/github/pr/owner/repository/124",
+      linked: [],
+    },
   ])("links what the command created: $name", ({ input, output, linked }) =>
     Effect.scoped(
       Effect.gen(function* () {

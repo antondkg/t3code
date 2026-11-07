@@ -112,6 +112,26 @@ export const PullRequestCheck = Schema.Struct({
 });
 export type PullRequestCheck = typeof PullRequestCheck.Type;
 
+export const PullRequestDeploymentState = Schema.Literals([
+  "pending",
+  "success",
+  "failure",
+  "inactive",
+]);
+export type PullRequestDeploymentState = typeof PullRequestDeploymentState.Type;
+
+/** An environment a deploy published for the pull request's head commit, such as a preview. */
+export const PullRequestDeployment = Schema.Struct({
+  environment: TrimmedNonEmptyString,
+  state: PullRequestDeploymentState,
+  url: Schema.NullOr(TrimmedNonEmptyString),
+  logUrl: Schema.NullOr(TrimmedNonEmptyString),
+  /** The commit deployed, which can be older than the head. */
+  commitSha: Schema.NullOr(TrimmedNonEmptyString),
+  updatedAt: IsoDateTime,
+});
+export type PullRequestDeployment = typeof PullRequestDeployment.Type;
+
 export const PullRequestReactionContent = Schema.Literals([
   "thumbs-up",
   "thumbs-down",
@@ -625,6 +645,10 @@ export const PullRequestDetail = Schema.Struct({
   reviewers: Schema.Array(PullRequestActor),
   labels: Schema.Array(PullRequestLabel),
   checks: Schema.Array(PullRequestCheck),
+  /** Absent means the host does not report deployments. */
+  deployments: Schema.optional(Schema.Array(PullRequestDeployment)),
+  /** The pull request's Graphite page, for a repository Graphite manages. */
+  graphiteUrl: Schema.optional(TrimmedNonEmptyString),
   mergeCapabilities: PullRequestMergeCapabilities,
   viewer: Schema.optional(TrimmedNonEmptyString),
   baseComparison: Schema.optional(PullRequestBaseComparison),

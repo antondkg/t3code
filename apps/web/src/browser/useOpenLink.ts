@@ -27,6 +27,8 @@ export function useOpenLink(threadRef: ScopedThreadRef | null | undefined): (
       readonly button?: number | undefined;
     };
     readonly threadRef?: ScopedThreadRef | undefined;
+    /** Opens in the app's browser whatever the link setting says; for previews of the work itself. */
+    readonly preferApp?: boolean | undefined;
   },
 ) => Promise<void> {
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
@@ -35,7 +37,7 @@ export function useOpenLink(threadRef: ScopedThreadRef | null | undefined): (
     const target = resolveLinkTarget({
       url,
       event: options.event ?? NO_MODIFIER,
-      preference: await resolveBrowserLinkTargetPreference(),
+      preference: options.preferApp ? "app" : await resolveBrowserLinkTargetPreference(),
       canOpenInApp: canOpenLinksInApp(targetThreadRef),
     });
     if (target === "app" && targetThreadRef) {
