@@ -12,6 +12,8 @@ import type {
   PullRequestCapabilities,
   PullRequestChecksState,
   PullRequestCheck,
+  PullRequestDeployment,
+  PullRequestLatestReview,
   PullRequestChecks,
   PullRequestComment,
   PullRequestFileViewed,
@@ -123,6 +125,7 @@ export interface ProviderChangeRequestSummary {
   readonly deletions?: number | undefined;
   readonly changedFiles?: number | undefined;
   readonly reviewDecision?: PullRequestReviewDecision | null | undefined;
+  readonly latestReviews?: ReadonlyArray<PullRequestLatestReview> | undefined;
   readonly checksState?: PullRequestChecksState | null | undefined;
   readonly mergeability?: PullRequestMergeability | undefined;
   /** Null means no stack; absent means not requested. */
@@ -206,6 +209,7 @@ export interface ProviderChangeRequestDetail extends ProviderChangeRequest {
   readonly closedAt: string | null;
   readonly reviewers: ReadonlyArray<PullRequestActor>;
   readonly checks: ReadonlyArray<PullRequestCheck>;
+  readonly deployments?: ReadonlyArray<PullRequestDeployment>;
   readonly mergeCapabilities: PullRequestMergeCapabilities;
   readonly viewerPermissions: PullRequestViewerPermissions;
   readonly baseComparison?: PullRequestBaseComparison;

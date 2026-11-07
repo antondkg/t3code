@@ -11,6 +11,7 @@ import {
 import {
   PullRequestActor,
   PullRequestChecksState,
+  PullRequestLatestReview,
   PullRequestMergeability,
   PullRequestReviewDecision,
   PullRequestState,
@@ -49,6 +50,7 @@ export const ThreadPullRequestSnapshot = Schema.Struct({
   deletions: Schema.optional(NonNegativeInt),
   changedFiles: Schema.optional(NonNegativeInt),
   reviewDecision: Schema.optional(Schema.NullOr(PullRequestReviewDecision)),
+  latestReviews: Schema.optional(Schema.Array(PullRequestLatestReview)),
   checksState: Schema.optional(Schema.NullOr(PullRequestChecksState)),
   mergeability: Schema.optional(PullRequestMergeability),
 });

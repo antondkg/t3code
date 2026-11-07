@@ -96,6 +96,7 @@ const coreResponse = (pullRequest: Readonly<Record<string, unknown>> = {}) => ({
         baseRef: { compare: { behindBy: 2 } },
         reviewRequests: { nodes: [] },
         labels: { nodes: [] },
+        deployedEvents: { nodes: [] },
         commits: { nodes: [] },
         ...pullRequest,
       },
@@ -552,6 +553,7 @@ const checkRun = (fields: Record<string, unknown>) => ({
   startedAt: null,
   completedAt: null,
   detailsUrl: null,
+  title: null,
   checkSuite: { workflowRun: null },
   ...fields,
 });
@@ -1057,7 +1059,12 @@ layer("GitHubPullRequestApi.layer", (it) => {
             {
               state: "APPROVED",
               isMinimized: false,
-              author: { __typename: "User", login: "reviewer" },
+              author: {
+                __typename: "User",
+                login: "reviewer",
+                avatarUrl: "https://avatars.githubusercontent.com/u/7",
+                name: "Ria Viewer",
+              },
             },
           ],
         },
@@ -1119,6 +1126,16 @@ layer("GitHubPullRequestApi.layer", (it) => {
           mergeability: "mergeable",
         },
       );
+      assert.deepStrictEqual(seven?.latestReviews, [
+        {
+          reviewer: {
+            login: "reviewer",
+            name: "Ria Viewer",
+            avatarUrl: "https://avatars.githubusercontent.com/u/7",
+          },
+          outcome: "approved",
+        },
+      ]);
       assert.strictEqual(eight?.headBranch, "feat/8");
       expect(mockedExecute).toHaveBeenCalledOnce();
       expect(queryAt(0)).toContain(

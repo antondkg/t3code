@@ -30,29 +30,32 @@ import { useOpenPrLink } from "~/lib/openPullRequestLink";
 import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "~/shortcutModifierState";
 import { useProjects, useServerConfigs, useThreadShell } from "~/state/entities";
+import { selectEnvironmentQueryData } from "@t3tools/client-runtime/state/runtime";
+import { pullRequestEnvironment } from "~/state/pullRequests";
+import { useEnvironmentQuerySelector } from "~/state/query";
 import { PullRequestChangeBreakdownStat } from "./PullRequestChangeBreakdownStat";
+import { useStackPendingNumbers } from "./linkedPullRequestDetails";
+import {
+  LinkedPullRequestFailingChecks,
+  LinkedPullRequestStatusLine,
+} from "./LinkedPullRequestStatus";
+import { resolveMergeReadiness } from "./pullRequestDeploy.logic";
+import { StackReadinessBanner } from "./StackReadinessBanner";
 import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 import { threadEnvironment } from "~/state/threads";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { RelativeTime } from "~/components/RelativeTime";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
-import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { openLinkPullRequestDialog } from "./LinkPullRequestDialog";
 import {
   PULL_REQUEST_ROW_CLASS,
   PULL_REQUEST_ROW_NUMBER_CLASS,
-  PullRequestRowAuthor,
-  PullRequestRowBranches,
   PullRequestRowGlyph,
   PullRequestRowLines,
 } from "./PullRequestListRow";
-import {
-  PullRequestDiffStat,
-  PullRequestReviewDecisionGlyph,
-  pullRequestChecksStatePresentation,
-} from "./pullRequestPresentation";
+import { PullRequestDiffStat } from "./pullRequestPresentation";
 import { PullRequestGlyph } from "./pullRequestIcons";
 import { pullRequestQuickActions } from "./pullRequestList.logic";
 import { PullRequestSpeedActions, PullRequestSpeedModeContext } from "./PullRequestSpeedActions";
@@ -64,26 +67,6 @@ const SOURCE_LABELS: Record<ThreadPullRequestLink["source"], string> = {
   stack: "Found in the stack",
   "stack-dismissed": "Dismissed",
 };
-
-function ChecksGlyph({
-  state,
-}: {
-  state: NonNullable<ThreadPullRequestLink["snapshot"]>["checksState"] & string;
-}) {
-  const presentation = pullRequestChecksStatePresentation(state);
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<span className="inline-flex shrink-0" />}>
-        <presentation.Icon
-          role="img"
-          aria-label={presentation.label}
-          className={cn("size-3.5", presentation.toneClassName)}
-        />
-      </TooltipTrigger>
-      <TooltipPopup>{presentation.label}</TooltipPopup>
-    </Tooltip>
-  );
-}
 
 function LinkRowImpl({
   line,
@@ -128,6 +111,21 @@ function LinkRowImpl({
       : null;
   const hasQuickActions =
     actionEntry !== null && pullRequestQuickActions(actionEntry, linkHostActions).length > 0;
+  // An open row's checks, deploy and Graphite page; the rows in view share these cached reads.
+  const detailAtom =
+    open && projectId !== null && snapshot !== null
+      ? pullRequestEnvironment.detail({
+          environmentId: threadRef.environmentId,
+          input: {
+            projectId,
+            host: link.host,
+            repository: link.repository,
+            number: link.number,
+            allowStale: false,
+          },
+        })
+      : null;
+  const detail = useEnvironmentQuerySelector(detailAtom, selectEnvironmentQueryData);
   return (
     <div
       className={cn(PULL_REQUEST_ROW_CLASS, "relative hover:bg-accent/60")}
@@ -191,6 +189,7 @@ function LinkRowImpl({
           signals={
             open ? (
               <>
+                {/* Checks and approval read on the status line below. */}
                 {watching ? (
                   <Tooltip>
                     <TooltipTrigger render={<span className="inline-flex shrink-0" />}>
@@ -201,10 +200,6 @@ function LinkRowImpl({
                       conflicts
                     </TooltipPopup>
                   </Tooltip>
-                ) : null}
-                {snapshot?.checksState ? <ChecksGlyph state={snapshot.checksState} /> : null}
-                {snapshot?.reviewDecision ? (
-                  <PullRequestReviewDecisionGlyph decision={snapshot.reviewDecision} />
                 ) : null}
               </>
             ) : null
@@ -250,23 +245,13 @@ function LinkRowImpl({
                   </TooltipPopup>
                 </Tooltip>
               ) : null}
-              {snapshot?.author ? (
-                <PullRequestRowAuthor
-                  actor={snapshot.author}
-                  className="shrink-0"
-                  labelClassName="max-w-28"
-                />
-              ) : null}
               {snapshot !== null ? (
-                <>
-                  <Tooltip>
-                    <TooltipTrigger render={<span className="flex min-w-0 max-w-32 font-mono" />}>
-                      <MiddleTruncate value={link.repository} showTitle={false} />
-                    </TooltipTrigger>
-                    <TooltipPopup>{link.repository}</TooltipPopup>
-                  </Tooltip>
-                  <PullRequestRowBranches head={snapshot.headBranch} base={snapshot.baseBranch} />
-                </>
+                <LinkedPullRequestStatusLine
+                  threadRef={threadRef}
+                  url={link.url}
+                  detail={detail}
+                  snapshot={snapshot}
+                />
               ) : (
                 <span className="truncate font-mono">
                   {link.host}/{link.repository}
@@ -275,6 +260,7 @@ function LinkRowImpl({
             </>
           }
           updatedAt={snapshot?.updatedAt}
+          below={<LinkedPullRequestFailingChecks threadRef={threadRef} detail={detail} />}
         />
       </a>
       {actionEntry !== null ? (
@@ -422,6 +408,15 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
     });
   };
 
+  const readinessSignals = useStackPendingNumbers(
+    threadRef.environmentId,
+    links,
+    environmentProjects,
+    thread?.projectId ?? null,
+  );
+  const readiness = resolveMergeReadiness(links, readinessSignals);
+  const graphite = readinessSignals.details.some((detail) => detail?.graphiteUrl !== undefined);
+
   // Legend rows update only for data/extraData changes; include all external inputs.
   const rowInputs = { speedMode, environmentProjects, capabilities, supportsWatch, thread };
 
@@ -445,6 +440,9 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
   return (
     <PullRequestSpeedModeContext value={speedMode}>
       <div className="flex h-full min-h-0 flex-col">
+        {readiness === null ? null : (
+          <StackReadinessBanner threadRef={threadRef} readiness={readiness} graphite={graphite} />
+        )}
         {/* Threads that run a stack or a sweep link hundreds of pull requests; only the rows in
           view are mounted. */}
         <LegendList<PullRequestListLine>
@@ -467,7 +465,7 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
               onSetWatching={supportsWatch ? handleSetWatching : null}
             />
           )}
-          estimatedItemSize={44}
+          estimatedItemSize={52}
           drawDistance={440}
           className="min-h-0 flex-1 overscroll-contain p-1.5"
         />

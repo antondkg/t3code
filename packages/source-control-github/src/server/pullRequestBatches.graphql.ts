@@ -25,14 +25,6 @@ export const ActorOther = Schema.Struct({
 })
 export interface ActorOther extends Schema.Struct.Type<typeof ActorOther.fields> {}
 
-/** Represents an object which can take actions on GitHub. Typically a User or Bot. */
-export const Actor = Schema.Struct({
-  __typename: GraphQL.otherTypename<Shared.Typename.Actor>()([]),
-  /** The username of the actor. */
-  login: Schema.String
-})
-export interface Actor extends Schema.Struct.Type<typeof Actor.fields> {}
-
 /** A review object for a given pull request. */
 export const LatestReviewsNodesPullRequestReview = Schema.Struct({
   /** Identifies the current state of the pull request review. */
@@ -40,7 +32,10 @@ export const LatestReviewsNodesPullRequestReview = Schema.Struct({
   /** Returns whether or not a comment has been minimized. */
   isMinimized: Schema.Boolean,
   /** The actor who authored the comment. */
-  author: Schema.NullOr(Actor)
+  author: Schema.NullOr(Schema.Union([
+    User,
+    ActorOther
+  ]))
 })
 export interface LatestReviewsNodesPullRequestReview extends Schema.Struct.Type<typeof LatestReviewsNodesPullRequestReview.fields> {}
 
@@ -162,7 +157,7 @@ export const PullRequestSummary = GraphQL.query("PullRequestSummary", {
       { name: "stacks", body: "Boolean!" }
     ],
     selections: [
-      { name: "repository", body: ["(owner:$", "owner", " name:$", "name", "){pullRequest(number:$", "number", "){number title url state isDraft mergeable reviewDecision additions deletions changedFiles updatedAt mergedAt closedAt headRefName baseRefName author{__typename login avatarUrl...on User{name}}latestReviews(first:20){nodes{state isMinimized author{__typename login}}}commits(last:1){nodes{commit{statusCheckRollup{state}}}}stack@include(if:$", "stacks", "){number size baseRefName}stackEntry@include(if:$", "stacks", "){position}}}"] }
+      { name: "repository", body: ["(owner:$", "owner", " name:$", "name", "){pullRequest(number:$", "number", "){number title url state isDraft mergeable reviewDecision additions deletions changedFiles updatedAt mergedAt closedAt headRefName baseRefName author{__typename login avatarUrl...on User{name}}latestReviews(first:20){nodes{state isMinimized author{__typename login avatarUrl...on User{name}}}}commits(last:1){nodes{commit{statusCheckRollup{state}}}}stack@include(if:$", "stacks", "){number size baseRefName}stackEntry@include(if:$", "stacks", "){position}}}"] }
     ],
     fragments: []
   },

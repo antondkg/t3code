@@ -308,8 +308,9 @@ and their marks follow the same rules as on web and desktop.
 A thread can hold several pull requests, including reviews from another repository on the same host.
 Use **Link pull request** in the command palette or **Linked pull requests** panel, or right-click a
 pull request link in the conversation. Creating a pull request from Git actions links it automatically,
-and so does an agent creating one with `gh pr create` or `glab mr create`. Agents can link other
-pull requests with the `link_pull_request` tool.
+and so does an agent creating one with `gh pr create` or `glab mr create`, or submitting a Graphite
+stack with `gt submit`, which links every layer it prints. Agents can link other pull requests with
+the `link_pull_request` tool, which also accepts Graphite pull request URLs.
 
 Use **Link pull request to thread** in the command palette to keep a pull request with the thread. From a review
 on the Pull requests page, **Link to thread** lets you search for an active thread. The review header
@@ -349,6 +350,36 @@ conflicts, and a watched thread never auto-settles.
 
 Cross-repository links use a project on the same host. Azure DevOps reviews require a project checked
 out from the matching organization and repository.
+
+## Previews and Graphite
+
+In the thread details card and the pull request panel, a GitHub pull request shows its preview
+deploy:
+**Deploying** while a check named `deploy…` runs, **Deploy failed** with a link to the failing step,
+**Preview** with a link to the environment GitHub recorded for it, or **No deploy** when the
+repository's workflow labels the pull request as skipped or passes its deploy check as skipped. When a
+newer deploy fails, the last good preview still shows, marked as failed. Each open linked pull request
+with a preview is also listed under **Previews** in the thread details card. Preview and Graphite
+links open in the thread's browser panel; ⌘-click or Ctrl-click opens your browser. The tooltip names the environment, a preview deployed
+from an earlier commit, and the state of a check named `e2e tests`.
+
+For a repository set up with Graphite (`gt init`), each pull request links to its Graphite page.
+**Merge readiness**, below Changes, says whether every open linked pull request passes its checks
+and is approved, and names the ones that do not.
+
+The **Pull requests** tab shows the same verdict above its list. Each row lists its checks, its
+approvers or the reviewers it waits on (or that nobody is assigned), its deploy and links to the pull request and Graphite, with failing checks named under
+it. A layer whose only waiting check is Graphite's stack check shows **CI passed** and **stack check
+pending**. A check that waits on a reviewer rather than a job, such as a status saying a reviewer must
+watch a demo and add a label, is left out of CI and shows as **demo to watch** (or **needs sign-off**)
+next to the review, linked to its run. When every open layer passes and is approved, **Merge stack with Graphite** runs
+`gt merge --confirm` in a terminal in the thread's checkout, and **Ask agent to merge** puts a merge
+request in the composer.
+
+When the linked pull requests form a stack, the card says whether every open layer is approved,
+and an upper layer of a repository that deploys previews shows **Preview after #N**: previews
+deploy only for pull requests into the default branch, so it can deploy once the bottom layer
+merges.
 
 ## GitHub stacks
 

@@ -47,6 +47,8 @@ export const CheckRun = Schema.Struct({
   __typename: Schema.Literal("CheckRun"),
   /** The name of the check for this check run. */
   name: Schema.String,
+  /** A string representing the check run */
+  title: Schema.NullOr(Schema.String),
   /** The current status of the check run. */
   status: GraphQL.enumLiterals(Shared.CheckStatusState.literals),
   /** The conclusion of the check run. */
@@ -277,20 +279,20 @@ export const RemovedFromMergeQueueEvent = Schema.Struct({
 export interface RemovedFromMergeQueueEvent extends Schema.Struct.Type<typeof RemovedFromMergeQueueEvent.fields> {}
 
 /** An item in a pull request timeline */
-export const PullRequestTimelineItemsOther = Schema.Struct({
+export const MergeQueueRemovalsNodesPullRequestTimelineItemsOther = Schema.Struct({
   __typename: GraphQL.otherTypename<Shared.Typename.PullRequestTimelineItems>()(["RemovedFromMergeQueueEvent"])
 })
-export interface PullRequestTimelineItemsOther extends Schema.Struct.Type<typeof PullRequestTimelineItemsOther.fields> {}
+export interface MergeQueueRemovalsNodesPullRequestTimelineItemsOther extends Schema.Struct.Type<typeof MergeQueueRemovalsNodesPullRequestTimelineItemsOther.fields> {}
 
 /** The connection type for PullRequestTimelineItems. */
-export const PullRequestTimelineItemsConnection = Schema.Struct({
+export const MergeQueueRemovalsPullRequestTimelineItemsConnection = Schema.Struct({
   /** A list of nodes. */
   nodes: Schema.NullOr(Schema.Array(Schema.NullOr(Schema.Union([
     RemovedFromMergeQueueEvent,
-    PullRequestTimelineItemsOther
+    MergeQueueRemovalsNodesPullRequestTimelineItemsOther
   ]))))
 })
-export interface PullRequestTimelineItemsConnection extends Schema.Struct.Type<typeof PullRequestTimelineItemsConnection.fields> {}
+export interface MergeQueueRemovalsPullRequestTimelineItemsConnection extends Schema.Struct.Type<typeof MergeQueueRemovalsPullRequestTimelineItemsConnection.fields> {}
 
 /** Represents a comparison between two commit revisions. */
 export const Comparison = Schema.Struct({
@@ -380,6 +382,58 @@ export const PullRequestCoreRepositoryPullRequestLabelsLabelConnection = Schema.
   nodes: Schema.NullOr(Schema.Array(Schema.NullOr(PullRequestCoreRepositoryPullRequestLabelsNodesLabel)))
 })
 export interface PullRequestCoreRepositoryPullRequestLabelsLabelConnection extends Schema.Struct.Type<typeof PullRequestCoreRepositoryPullRequestLabelsLabelConnection.fields> {}
+
+/** Describes the status of a given deployment attempt. */
+export const DeploymentStatus = Schema.Struct({
+  /** Identifies the current state of the deployment. */
+  state: GraphQL.enumLiterals(Shared.DeploymentStatusState.literals),
+  /** Identifies the environment URL of the deployment. */
+  environmentUrl: Schema.NullOr(Shared.URI),
+  /** Identifies the log URL of the deployment. */
+  logUrl: Schema.NullOr(Shared.URI),
+  /** Identifies the date and time when the object was last updated. */
+  updatedAt: Shared.DateTime
+})
+export interface DeploymentStatus extends Schema.Struct.Type<typeof DeploymentStatus.fields> {}
+
+/** Represents triggered deployment instance. */
+export const Deployment = Schema.Struct({
+  /** The latest environment to which this deployment was made. */
+  environment: Schema.NullOr(Schema.String),
+  /** The current state of the deployment. */
+  state: Schema.NullOr(GraphQL.enumLiterals(Shared.DeploymentState.literals)),
+  /** Identifies the oid of the deployment commit, even if the commit has been deleted. */
+  commitOid: Schema.String,
+  /** Identifies the date and time when the object was last updated. */
+  updatedAt: Shared.DateTime,
+  /** The latest status of this deployment. */
+  latestStatus: Schema.NullOr(DeploymentStatus)
+})
+export interface Deployment extends Schema.Struct.Type<typeof Deployment.fields> {}
+
+/** Represents a 'deployed' event on a given pull request. */
+export const DeployedEvent = Schema.Struct({
+  __typename: Schema.Literal("DeployedEvent"),
+  /** The deployment associated with the 'deployed' event. */
+  deployment: Deployment
+})
+export interface DeployedEvent extends Schema.Struct.Type<typeof DeployedEvent.fields> {}
+
+/** An item in a pull request timeline */
+export const DeployedEventsNodesPullRequestTimelineItemsOther = Schema.Struct({
+  __typename: GraphQL.otherTypename<Shared.Typename.PullRequestTimelineItems>()(["DeployedEvent"])
+})
+export interface DeployedEventsNodesPullRequestTimelineItemsOther extends Schema.Struct.Type<typeof DeployedEventsNodesPullRequestTimelineItemsOther.fields> {}
+
+/** The connection type for PullRequestTimelineItems. */
+export const DeployedEventsPullRequestTimelineItemsConnection = Schema.Struct({
+  /** A list of nodes. */
+  nodes: Schema.NullOr(Schema.Array(Schema.NullOr(Schema.Union([
+    DeployedEvent,
+    DeployedEventsNodesPullRequestTimelineItemsOther
+  ]))))
+})
+export interface DeployedEventsPullRequestTimelineItemsConnection extends Schema.Struct.Type<typeof DeployedEventsPullRequestTimelineItemsConnection.fields> {}
 
 /** Information about pagination in a connection. */
 export const ContextsPageInfoPageInfo = Schema.Struct({
@@ -485,7 +539,7 @@ export const PullRequestCoreRepositoryPullRequestPullRequest = Schema.Struct({
   /** Returns the auto-merge request object if one exists for this pull request. */
   autoMergeRequest: Schema.NullOr(AutoMergeRequest),
   /** A list of events, comments, commits, etc. associated with the pull request. */
-  mergeQueueRemovals: Schema.optionalKey(PullRequestTimelineItemsConnection),
+  mergeQueueRemovals: Schema.optionalKey(MergeQueueRemovalsPullRequestTimelineItemsConnection),
   /** Check if the current viewer can update this object. */
   viewerCanUpdate: Schema.Boolean,
   /** Did the viewer author this comment. */
@@ -501,6 +555,8 @@ export const PullRequestCoreRepositoryPullRequestPullRequest = Schema.Struct({
   reviewRequests: Schema.NullOr(PullRequestCoreRepositoryPullRequestReviewRequestsReviewRequestConnection),
   /** A list of labels associated with the object. */
   labels: Schema.NullOr(PullRequestCoreRepositoryPullRequestLabelsLabelConnection),
+  /** A list of events, comments, commits, etc. associated with the pull request. */
+  deployedEvents: DeployedEventsPullRequestTimelineItemsConnection,
   /** A list of commits present in this pull request's head branch not present in the base branch. */
   commits: PullRequestCoreRepositoryPullRequestCommitsPullRequestCommitConnection
 })
@@ -536,10 +592,10 @@ export const PullRequestCore = GraphQL.query("PullRequestCore", {
       { name: "mergeQueue", body: "Boolean!" }
     ],
     selections: [
-      { name: "repository", body: ["(owner:$", "owner", " name:$", "name", "){mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed autoMergeAllowed viewerPermission pullRequest(number:$", "number", "){number title url body state isDraft mergeable mergeStateStatus reviewDecision additions deletions changedFiles createdAt updatedAt mergedAt closedAt headRefName baseRefName headRefOid isCrossRepository maintainerCanModify headRepositoryOwner{__typename login}headRepository{nameWithOwner viewerPermission}headRef{id}author{__typename login avatarUrl...on User{id name}}autoMergeRequest{mergeMethod}mergeQueueRemovals:timelineItems(last:1 itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT])@include(if:$", "mergeQueue", "){nodes{__typename...on RemovedFromMergeQueueEvent{id createdAt reason}}}viewerCanUpdate viewerDidAuthor viewerCanUpdateBranch baseRef{compare(headRef:$", "headRef", "){behindBy}}reviewRequests(first:$", "requestedReviewers", "){nodes{requestedReviewer{__typename...on User{login name}...on Bot{login}...on Team{slug combinedSlug teamName:name teamAvatarUrl:avatarUrl}}}}labels(first:100){nodes{name color description}}commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename...", "CheckContext", "}pageInfo{hasNextPage endCursor}}}}}}}}"] }
+      { name: "repository", body: ["(owner:$", "owner", " name:$", "name", "){mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed autoMergeAllowed viewerPermission pullRequest(number:$", "number", "){number title url body state isDraft mergeable mergeStateStatus reviewDecision additions deletions changedFiles createdAt updatedAt mergedAt closedAt headRefName baseRefName headRefOid isCrossRepository maintainerCanModify headRepositoryOwner{__typename login}headRepository{nameWithOwner viewerPermission}headRef{id}author{__typename login avatarUrl...on User{id name}}autoMergeRequest{mergeMethod}mergeQueueRemovals:timelineItems(last:1 itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT])@include(if:$", "mergeQueue", "){nodes{__typename...on RemovedFromMergeQueueEvent{id createdAt reason}}}viewerCanUpdate viewerDidAuthor viewerCanUpdateBranch baseRef{compare(headRef:$", "headRef", "){behindBy}}reviewRequests(first:$", "requestedReviewers", "){nodes{requestedReviewer{__typename...on User{login name}...on Bot{login}...on Team{slug combinedSlug teamName:name teamAvatarUrl:avatarUrl}}}}labels(first:100){nodes{name color description}}deployedEvents:timelineItems(itemTypes:[DEPLOYED_EVENT]last:25){nodes{__typename...on DeployedEvent{deployment{environment state commitOid updatedAt latestStatus{state environmentUrl logUrl updatedAt}}}}}commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename...", "CheckContext", "}pageInfo{hasNextPage endCursor}}}}}}}}"] }
     ],
     fragments: [
-      { name: "CheckContext", body: ["on StatusCheckRollupContext{__typename...on StatusContext{context state targetUrl createdAt description isRequired(pullRequestNumber:$", "number", ")@include(if:$", "required", ")}...on CheckRun{name status conclusion startedAt completedAt detailsUrl isRequired(pullRequestNumber:$", "number", ")@include(if:$", "required", ")checkSuite{workflowRun{workflow{name}}}}}"] }
+      { name: "CheckContext", body: ["on StatusCheckRollupContext{__typename...on StatusContext{context state targetUrl createdAt description isRequired(pullRequestNumber:$", "number", ")@include(if:$", "required", ")}...on CheckRun{name title status conclusion startedAt completedAt detailsUrl isRequired(pullRequestNumber:$", "number", ")@include(if:$", "required", ")checkSuite{workflowRun{workflow{name}}}}}"] }
     ]
   },
   variables: {
@@ -591,7 +647,7 @@ export const PullRequestCheckContexts = GraphQL.query("PullRequestCheckContexts"
       { name: "repository", body: ["(owner:$", "owner", " name:$", "name", "){pullRequest(number:$", "number", "){headRefOid commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100 after:$", "after", "){nodes{__typename...", "CheckContext", "}pageInfo{hasNextPage endCursor}}}}}}}}"] }
     ],
     fragments: [
-      { name: "CheckContext", body: ["on StatusCheckRollupContext{__typename...on StatusContext{context state targetUrl createdAt description isRequired(pullRequestNumber:$", "number", ")@include(if:$", "required", ")}...on CheckRun{name status conclusion startedAt completedAt detailsUrl isRequired(pullRequestNumber:$", "number", ")@include(if:$", "required", ")checkSuite{workflowRun{workflow{name}}}}}"] }
+      { name: "CheckContext", body: ["on StatusCheckRollupContext{__typename...on StatusContext{context state targetUrl createdAt description isRequired(pullRequestNumber:$", "number", ")@include(if:$", "required", ")}...on CheckRun{name title status conclusion startedAt completedAt detailsUrl isRequired(pullRequestNumber:$", "number", ")@include(if:$", "required", ")checkSuite{workflowRun{workflow{name}}}}}"] }
     ]
   },
   variables: {

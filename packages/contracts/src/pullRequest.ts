@@ -92,6 +92,13 @@ export const PullRequestActor = Schema.Struct({
 });
 export type PullRequestActor = typeof PullRequestActor.Type;
 
+/** A reviewer's latest standing verdict, the one that counts toward approval. */
+export const PullRequestLatestReview = Schema.Struct({
+  reviewer: PullRequestActor,
+  outcome: Schema.Literals(["approved", "changes-requested"]),
+});
+export type PullRequestLatestReview = typeof PullRequestLatestReview.Type;
+
 export const PullRequestLabel = Schema.Struct({
   name: TrimmedNonEmptyString,
   color: Schema.NullOr(Schema.String),
@@ -123,6 +130,26 @@ export const PullRequestCheck = Schema.Struct({
   placeholder: Schema.optional(Schema.Boolean),
 });
 export type PullRequestCheck = typeof PullRequestCheck.Type;
+
+export const PullRequestDeploymentState = Schema.Literals([
+  "pending",
+  "success",
+  "failure",
+  "inactive",
+]);
+export type PullRequestDeploymentState = typeof PullRequestDeploymentState.Type;
+
+/** An environment a deploy published for the pull request's head commit, such as a preview. */
+export const PullRequestDeployment = Schema.Struct({
+  environment: TrimmedNonEmptyString,
+  state: PullRequestDeploymentState,
+  url: Schema.NullOr(TrimmedNonEmptyString),
+  logUrl: Schema.NullOr(TrimmedNonEmptyString),
+  /** The commit deployed, which can be older than the head. */
+  commitSha: Schema.NullOr(TrimmedNonEmptyString),
+  updatedAt: IsoDateTime,
+});
+export type PullRequestDeployment = typeof PullRequestDeployment.Type;
 
 export const PullRequestReactionContent = Schema.Literals([
   "thumbs-up",
@@ -526,6 +553,8 @@ export const PullRequestSummary = Schema.Struct({
   deletions: Schema.optional(NonNegativeInt),
   changedFiles: Schema.optional(NonNegativeInt),
   reviewDecision: Schema.optional(Schema.NullOr(PullRequestReviewDecision)),
+  /** Absent when the host or read does not report individual verdicts. */
+  latestReviews: Schema.optional(Schema.Array(PullRequestLatestReview)),
   checksState: Schema.optional(Schema.NullOr(PullRequestChecksState)),
   mergeability: Schema.optional(PullRequestMergeability),
   /** Null when the host says the pull request is in no stack; absent when the read did not ask. */
@@ -666,6 +695,10 @@ export const PullRequestDetail = Schema.Struct({
   reviewers: Schema.Array(PullRequestActor),
   labels: Schema.Array(PullRequestLabel),
   checks: Schema.Array(PullRequestCheck),
+  /** Absent means the host does not report deployments. */
+  deployments: Schema.optional(Schema.Array(PullRequestDeployment)),
+  /** The pull request's Graphite page, for a repository Graphite manages. */
+  graphiteUrl: Schema.optional(TrimmedNonEmptyString),
   mergeCapabilities: PullRequestMergeCapabilities,
   viewer: Schema.optional(TrimmedNonEmptyString),
   baseComparison: Schema.optional(PullRequestBaseComparison),

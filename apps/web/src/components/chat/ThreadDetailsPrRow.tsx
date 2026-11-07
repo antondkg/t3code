@@ -8,19 +8,29 @@ import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { selectEnvironmentQueryData } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import type { EnvironmentId, ProjectId, PullRequestRef } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ProjectId,
+  PullRequestRef,
+  PullRequestReviewDecision,
+  ScopedThreadRef,
+} from "@t3tools/contracts";
 import {
   ArrowUpRightIcon,
   EyeIcon,
   EyeOffIcon,
   FileDiffIcon,
   GitBranchIcon,
+  LayersIcon,
   TriangleAlertIcon,
+  UserRoundCheckIcon,
+  UserRoundXIcon,
 } from "lucide-react";
 import { AsyncResult } from "effect/reactivity";
 import { useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import type { ComposerThreadTarget } from "~/composerDraftStore";
+import { useOpenLink } from "~/browser/useOpenLink";
 import { useLiveRefresh } from "~/hooks/useLiveRefresh";
 import { usePullRequestChecksRefresh } from "~/hooks/usePullRequestChecksRefresh";
 import { cn } from "~/lib/utils";
@@ -44,6 +54,14 @@ import {
   resolveThreadPanelPullRequestAction,
 } from "../pullRequest/pullRequestDetail.logic";
 import { PullRequestChecksPopover } from "../pullRequest/PullRequestChecksPopover";
+import { PullRequestDeployIcon } from "../pullRequest/PullRequestDeployLinks";
+import {
+  deployAwaitsPreviewUrl,
+  describePullRequestDeploy,
+  resolvePullRequestDeployStatus,
+  type PullRequestDeployPresentation,
+  type PullRequestDeployView,
+} from "../pullRequest/pullRequestDeploy.logic";
 import {
   pullRequestChecksState,
   PullRequestCheckStatusIcon,
@@ -88,6 +106,7 @@ const isSettledWithoutChecks = (result: AsyncResult.AsyncResult<unknown, unknown
 
 export function ThreadDetailsPrRow({
   environmentId,
+  threadRef,
   pr,
   number,
   reference: linkedReference,
@@ -99,8 +118,12 @@ export function ThreadDetailsPrRow({
   onActed,
   onStopWatching,
   composerTarget,
+  stackBase = null,
+  reviewDecision = null,
 }: {
   environmentId: EnvironmentId;
+  /** Opens preview and Graphite links in this thread's browser when links open in the app. */
+  threadRef?: ScopedThreadRef | undefined;
   pr: ThreadPr;
   number: number;
   reference?: Pick<PullRequestRef, "host" | "repository" | "number"> | null;
@@ -113,6 +136,10 @@ export function ThreadDetailsPrRow({
   onStopWatching?: (() => void) | undefined;
   /** Fix and Resolve write here instead of checking the pull request out in a new thread. */
   composerTarget?: ComposerThreadTarget | undefined;
+  /** The bottom open layer of this pull request's stack, when this one sits above it. */
+  stackBase?: Pick<PullRequestRef, "host" | "repository" | "number"> | null;
+  /** The host's review verdict from the thread's link snapshot. */
+  reviewDecision?: PullRequestReviewDecision | null | undefined;
 }) {
   const serverConfigs = useServerConfigs();
   const supportsPullRequests = serverConfigs.get(environmentId) !== undefined;
@@ -157,6 +184,38 @@ export function ThreadDetailsPrRow({
     },
     { enabled: open, key: `workspace-pr:${refreshKey}`, intervalMs: 10 * 60_000 },
   );
+  const deploy = detail === null ? null : resolvePullRequestDeployStatus(detail);
+  // Deploy checks move faster than the slow detail read that carries the preview URL.
+  useLiveRefresh(
+    () => {
+      if (!detailQuery.isPending()) detailQuery.refresh();
+    },
+    {
+      enabled:
+        open && detail !== null && (deploy?.kind === "deploying" || deployAwaitsPreviewUrl(detail)),
+      key: `workspace-pr-deploy:${refreshKey}`,
+      intervalMs: 30_000,
+    },
+  );
+  // An upper stack layer reads its bottom layer's detail, which that layer's row already holds.
+  const stackBaseAtom =
+    stackBase !== null && deploy === null && open && project !== null && supportsPullRequests
+      ? pullRequestEnvironment.detail({
+          environmentId,
+          input: { ...stackBase, projectId: project.id as ProjectId, allowStale: false },
+        })
+      : null;
+  const stackBaseDetail = useEnvironmentQuerySelector(stackBaseAtom, selectEnvironmentQueryData);
+  const deployView: PullRequestDeployView | null =
+    deploy ??
+    (stackBase !== null &&
+    stackBaseDetail !== null &&
+    resolvePullRequestDeployStatus(stackBaseDetail) !== null
+      ? { kind: "awaiting-base", base: stackBase.number }
+      : null);
+  const openLink = useOpenLink(threadRef);
+  const openExternal = (url: string, event: ReactMouseEvent<HTMLElement>) =>
+    void openLink(url, { event, preferApp: true }).catch((error: unknown) => console.error(error));
   usePullRequestChecksRefresh({
     refresh: () => {
       if (!checksQuery.isPending() && !detailQuery.isPending()) checksQuery.refresh();
@@ -471,13 +530,26 @@ export function ThreadDetailsPrRow({
   );
 
   const showChecks = detail !== null && checksRollup !== null && !conflicting && !detail.isDraft;
+  const graphiteUrl = detail?.graphiteUrl ?? null;
+  const deployControl =
+    deployView === null
+      ? null
+      : renderDeployControl(
+          describePullRequestDeploy(deployView, detail?.headSha ?? null),
+          openExternal,
+        );
 
   return (
     <>
-      {detail !== null && (showChecks || trailingAction !== null || watching) ? (
+      {detail !== null &&
+      (showChecks ||
+        trailingAction !== null ||
+        watching ||
+        deployControl !== null ||
+        graphiteUrl !== null) ? (
         <div className="pb-1.5">
           {openRow(detail.title, "row", true)}
-          <div className="mt-1.5 flex h-5 min-w-0 items-center gap-0.5 ps-9 pe-2.5 text-xs text-muted-foreground">
+          <div className="mt-1.5 flex h-5 min-w-0 items-center gap-0.5 overflow-hidden ps-9 pe-2.5 text-xs text-muted-foreground">
             <span className="me-1 shrink-0 tabular-nums">#{number}</span>
             {showChecks && checksRollup !== null ? (
               <PullRequestChecksPopover
@@ -487,6 +559,47 @@ export function ThreadDetailsPrRow({
                 render={<ThreadDetailsControl part="meta" className="min-w-0 shrink" />}
               />
             ) : null}
+            {reviewDecision === "approved" || reviewDecision === "changes-requested" ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className="inline-flex h-6 shrink-0 items-center px-1"
+                      aria-label={reviewDecision === "approved" ? "Approved" : "Changes requested"}
+                    />
+                  }
+                >
+                  {reviewDecision === "approved" ? (
+                    <UserRoundCheckIcon aria-hidden className="size-3.5 shrink-0 text-success" />
+                  ) : (
+                    <UserRoundXIcon aria-hidden className="size-3.5 shrink-0 text-destructive" />
+                  )}
+                </TooltipTrigger>
+                <TooltipPopup side="top">
+                  {reviewDecision === "approved" ? "Approved" : "Changes requested"}
+                </TooltipPopup>
+              </Tooltip>
+            ) : null}
+            {deployControl}
+            {graphiteUrl === null ? null : (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <ThreadDetailsControl
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      part="meta"
+                      aria-label="Open in Graphite"
+                      onClick={(event) => openExternal(graphiteUrl, event)}
+                    />
+                  }
+                >
+                  <LayersIcon aria-hidden className="size-3 shrink-0" />
+                </TooltipTrigger>
+                <TooltipPopup side="top">Open in Graphite</TooltipPopup>
+              </Tooltip>
+            )}
             {watchControl("icon")}
             <span className="flex-1" />
             {trailingAction ? (
@@ -549,5 +662,40 @@ export function ThreadDetailsPrRow({
         </AlertDialog>
       ) : null}
     </>
+  );
+}
+
+function renderDeployControl(
+  shown: PullRequestDeployPresentation,
+  open: (url: string, event: ReactMouseEvent<HTMLElement>) => void,
+) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <ThreadDetailsControl
+            type="button"
+            variant="ghost"
+            size="sm"
+            part="meta"
+            {...(shown.tone === "default" ? {} : { tone: shown.tone })}
+            className="min-w-0 shrink"
+            aria-disabled={shown.url === null || undefined}
+            onClick={(event) => {
+              if (shown.url !== null) open(shown.url, event);
+            }}
+          />
+        }
+      >
+        <PullRequestDeployIcon icon={shown.icon} />
+        {/* A skipped deploy says little, so the narrow row keeps only its icon and tooltip. */}
+        {shown.quiet ? (
+          <span className="sr-only">{shown.label}</span>
+        ) : (
+          <span className="truncate">{shown.label}</span>
+        )}
+      </TooltipTrigger>
+      <TooltipPopup side="top">{shown.tooltip}</TooltipPopup>
+    </Tooltip>
   );
 }

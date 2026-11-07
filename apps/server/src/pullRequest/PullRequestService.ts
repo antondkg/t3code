@@ -8,9 +8,11 @@ import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -754,6 +756,31 @@ export const make = Effect.gen(function* () {
   const filesViewedStore = yield* PullRequestFilesViewed.PullRequestFilesViewedRepository;
   const readCache = yield* PullRequestReadCache.PullRequestReadCache;
   const clock = yield* Clock.Clock;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+
+  // Graphite keeps its settings in the shared git directory, which a worktree's `.git` file names.
+  const managedByGraphite = Effect.fn("PullRequestService.managedByGraphite")(function* (
+    workspaceRoot: string,
+  ) {
+    const dotGit = path.join(workspaceRoot, ".git");
+    const info = yield* fileSystem.stat(dotGit).pipe(Effect.option);
+    if (Option.isNone(info)) return false;
+    let commonDir = dotGit;
+    if (info.value.type === "File") {
+      const content = yield* fileSystem.readFileString(dotGit).pipe(Effect.orElseSucceed(() => ""));
+      const gitDir = /^gitdir:\s*(.+)$/mu.exec(content)?.[1]?.trim();
+      if (!gitDir) return false;
+      const resolved = path.resolve(workspaceRoot, gitDir);
+      commonDir =
+        path.basename(path.dirname(resolved)) === "worktrees"
+          ? path.dirname(path.dirname(resolved))
+          : resolved;
+    }
+    return yield* fileSystem
+      .exists(path.join(commonDir, ".graphite_repo_config"))
+      .pipe(Effect.orElseSucceed(() => false));
+  });
 
   /**
    * Where each project's remote is served from, by the remote's recognised base URL: a remote no
@@ -1777,6 +1804,9 @@ export const make = Effect.gen(function* () {
     ...(changeRequest.reviewDecision === undefined
       ? {}
       : { reviewDecision: changeRequest.reviewDecision }),
+    ...("latestReviews" in changeRequest && changeRequest.latestReviews !== undefined
+      ? { latestReviews: changeRequest.latestReviews }
+      : {}),
     ...(changeRequest.checksState === undefined ? {} : { checksState: changeRequest.checksState }),
     ...(changeRequest.mergeability === undefined
       ? {}
@@ -1862,64 +1892,77 @@ export const make = Effect.gen(function* () {
               })
               .pipe(Effect.mapError(toPullRequestError("detail")), observeRead),
             viewerOf(project),
+            project.api.kind === "github" && project.host === "github.com"
+              ? managedByGraphite(project.project.workspaceRoot)
+              : Effect.succeed(false),
           ],
-          { concurrency: 2 },
+          { concurrency: 3 },
         ).pipe(
-          Effect.map(([{ value: changeRequest, observedAt }, viewer]): PullRequestDetail => ({
-            provider: project.api.kind,
-            capabilities: project.api.capabilities,
-            projectId: project.project.id,
-            projectTitle: project.project.title,
-            workspaceRoot: project.project.workspaceRoot,
-            repository: project.repository,
-            number: changeRequest.number,
-            title: changeRequest.title,
-            body: changeRequest.body,
-            url: changeRequest.url,
-            author: changeRequest.author,
-            state: changeRequest.state,
-            isDraft: changeRequest.isDraft,
-            mergeability: changeRequest.mergeability,
-            additions: changeRequest.additions,
-            deletions: changeRequest.deletions,
-            changedFiles: changeRequest.changedFiles,
-            headBranch: changeRequest.headBranch,
-            ...(changeRequest.headRepositoryNameWithOwner === undefined
-              ? {}
-              : { headRepositoryNameWithOwner: changeRequest.headRepositoryNameWithOwner }),
-            ...(changeRequest.headSha ? { headSha: changeRequest.headSha } : {}),
-            baseBranch: changeRequest.baseBranch,
-            createdAt: changeRequest.createdAt,
-            updatedAt: changeRequest.updatedAt,
-            observedAt,
-            mergedAt: changeRequest.mergedAt,
-            closedAt: changeRequest.closedAt,
-            reviewers: changeRequest.reviewers,
-            labels: changeRequest.labels,
-            checks: changeRequest.checks,
-            mergeCapabilities: changeRequest.mergeCapabilities,
-            viewerPermissions: changeRequest.viewerPermissions,
-            ...(viewer === null || viewer.trim().length === 0 ? {} : { viewer }),
-            ...(changeRequest.baseComparison === undefined
-              ? {}
-              : { baseComparison: changeRequest.baseComparison }),
-            ...(changeRequest.behindBy === undefined ? {} : { behindBy: changeRequest.behindBy }),
-            ...(changeRequest.autoMergeEnabled === undefined
-              ? {}
-              : { autoMergeEnabled: changeRequest.autoMergeEnabled }),
-            ...(changeRequest.autoMergeMethod === undefined
-              ? {}
-              : { autoMergeMethod: changeRequest.autoMergeMethod }),
-            ...(changeRequest.maintainerCanModify === undefined
-              ? {}
-              : { maintainerCanModify: changeRequest.maintainerCanModify }),
-            ...(changeRequest.workflowApprovalsRequired === undefined
-              ? {}
-              : { workflowApprovalsRequired: changeRequest.workflowApprovalsRequired }),
-            ...(changeRequest.mergeQueueRemoval === undefined
-              ? {}
-              : { mergeQueueRemoval: changeRequest.mergeQueueRemoval }),
-          })),
+          Effect.map(
+            ([{ value: changeRequest, observedAt }, viewer, graphite]): PullRequestDetail => ({
+              provider: project.api.kind,
+              capabilities: project.api.capabilities,
+              projectId: project.project.id,
+              projectTitle: project.project.title,
+              workspaceRoot: project.project.workspaceRoot,
+              repository: project.repository,
+              number: changeRequest.number,
+              title: changeRequest.title,
+              body: changeRequest.body,
+              url: changeRequest.url,
+              author: changeRequest.author,
+              state: changeRequest.state,
+              isDraft: changeRequest.isDraft,
+              mergeability: changeRequest.mergeability,
+              additions: changeRequest.additions,
+              deletions: changeRequest.deletions,
+              changedFiles: changeRequest.changedFiles,
+              headBranch: changeRequest.headBranch,
+              ...(changeRequest.headRepositoryNameWithOwner === undefined
+                ? {}
+                : { headRepositoryNameWithOwner: changeRequest.headRepositoryNameWithOwner }),
+              ...(changeRequest.headSha ? { headSha: changeRequest.headSha } : {}),
+              baseBranch: changeRequest.baseBranch,
+              createdAt: changeRequest.createdAt,
+              updatedAt: changeRequest.updatedAt,
+              observedAt,
+              mergedAt: changeRequest.mergedAt,
+              closedAt: changeRequest.closedAt,
+              reviewers: changeRequest.reviewers,
+              labels: changeRequest.labels,
+              checks: changeRequest.checks,
+              ...(changeRequest.deployments === undefined
+                ? {}
+                : { deployments: changeRequest.deployments }),
+              ...(graphite
+                ? {
+                    graphiteUrl: `https://app.graphite.com/github/pr/${project.repository}/${changeRequest.number}`,
+                  }
+                : {}),
+              mergeCapabilities: changeRequest.mergeCapabilities,
+              viewerPermissions: changeRequest.viewerPermissions,
+              ...(viewer === null || viewer.trim().length === 0 ? {} : { viewer }),
+              ...(changeRequest.baseComparison === undefined
+                ? {}
+                : { baseComparison: changeRequest.baseComparison }),
+              ...(changeRequest.behindBy === undefined ? {} : { behindBy: changeRequest.behindBy }),
+              ...(changeRequest.autoMergeEnabled === undefined
+                ? {}
+                : { autoMergeEnabled: changeRequest.autoMergeEnabled }),
+              ...(changeRequest.autoMergeMethod === undefined
+                ? {}
+                : { autoMergeMethod: changeRequest.autoMergeMethod }),
+              ...(changeRequest.maintainerCanModify === undefined
+                ? {}
+                : { maintainerCanModify: changeRequest.maintainerCanModify }),
+              ...(changeRequest.workflowApprovalsRequired === undefined
+                ? {}
+                : { workflowApprovalsRequired: changeRequest.workflowApprovalsRequired }),
+              ...(changeRequest.mergeQueueRemoval === undefined
+                ? {}
+                : { mergeQueueRemoval: changeRequest.mergeQueueRemoval }),
+            }),
+          ),
         ),
       ),
     );
