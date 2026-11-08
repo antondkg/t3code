@@ -19,7 +19,7 @@ MANIFEST = ROOT / "scripts/personal/release.json"
 APP = Path("/Applications/T3 Code (Beta).app")
 USERDATA = Path.home() / ".t3/userdata"
 BACKUPS = Path.home() / ".t3/personal-backups"
-KEEP_BACKUPS = 3
+KEEP_BACKUPS = 2
 HELPER_PID = BACKUPS / "install.pid"
 SCHEDULE_LABEL = "com.antondkg.t3-personal-upgrade"
 SCHEDULE_PLIST = Path.home() / f"Library/LaunchAgents/{SCHEDULE_LABEL}.plist"
@@ -128,6 +128,10 @@ tar -xzf "$archive" -C "$staging" --strip-components=1
 printf '%s\\n' {version} > "$staging/.install-complete"
 rm -rf "$HOME/.t3/runtime/versions/{version}"
 mv "$staging" "$HOME/.t3/runtime/versions/{version}"
+# Keep this runtime and the one before it, and any other a running server still executes.
+ls -1t "$HOME/.t3/runtime/versions" | grep -v '^[.]' | tail -n +3 | while read -r old; do
+  pgrep -f "[r]untime/versions/$old/" >/dev/null || rm -rf "$HOME/.t3/runtime/versions/$old"
+done
 echo "Installed t3 {version} runtime on $(hostname)"
 """
     run("ssh", host, "bash -lc " + shlex.quote(script))
@@ -179,9 +183,12 @@ def staged_app(version):
 
 
 def t3_running():
-    # Waiting only; nothing is ever signalled by this match.
-    return subprocess.run(["pgrep", "-f", "^" + re.escape(f"{APP}/Contents/MacOS/")],
-                          stdout=subprocess.DEVNULL).returncode == 0
+    # Waiting only; nothing is ever signalled by this match. A failed ps reads as running.
+    listing = subprocess.run(["ps", "-axo", "command="], capture_output=True, text=True)
+    if listing.returncode != 0:
+        return True
+    prefix = f"{APP}/Contents/MacOS/"
+    return any(line.startswith(prefix) for line in listing.stdout.splitlines())
 
 
 def back_up_userdata(target):
@@ -201,6 +208,8 @@ def finish_install(new_app):
     new_app = Path(new_app)
     while t3_running():
         time.sleep(1)
+    # A newer build stops only helpers still waiting, never one moving the app.
+    HELPER_PID.unlink(missing_ok=True)
     old_version = out("defaults", "read", str(APP / "Contents/Info"),
                       "CFBundleShortVersionString") if APP.exists() else "none"
     backup = BACKUPS / f"{time.strftime('%Y%m%d-%H%M%S')}-from-{old_version}"

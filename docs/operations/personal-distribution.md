@@ -44,7 +44,8 @@ installs it under `~/.t3/runtime/versions/`, so the SSH connection never downloa
 Mac app is signed with the first `Developer ID Application` identity in the keychain
 (`T3_PERSONAL_SIGN_IDENTITY` overrides; empty keeps ad-hoc) so 1Password's Add Browser accepts it,
 then swapped in when T3 quits, and reopens; the previous app and a SQLite-API copy of
-`~/.t3/userdata` stay in `~/.t3/personal-backups/` (last three). On a rebase conflict, resolve it,
+`~/.t3/userdata` stay in `~/.t3/personal-backups/` (last two). Each build deletes earlier
+versions' artifacts and cached runtimes, and `vallor-dev` keeps its two newest runtimes plus any in use. On a rebase conflict, resolve it,
 run `git rebase --continue`, and rerun the command. Publishing a release stays optional.
 
 `--schedule 05:00` (with the same options) installs a LaunchAgent that runs the command daily with

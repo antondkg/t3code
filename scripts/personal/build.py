@@ -65,6 +65,9 @@ def cli_archive(output):
         temporary.rename(template)
     if digest(template) != RELEASE["linuxRuntimeSha256"]:
         raise SystemExit("Cached runtime checksum mismatch")
+    for stale in cache.glob("t3-*-linux-x64.tar.gz"):
+        if stale != template:
+            stale.unlink()
     originals = {path: (ROOT / path).read_bytes() for path in MANIFESTS}
     try:
         run("vp", "exec", "node", "scripts/update-release-package-versions.ts", version)
@@ -125,6 +128,10 @@ ENV["APP_VERSION"] = RELEASE["version"]
 ENV["T3CODE_DESKTOP_UPDATE_REPOSITORY"] = RELEASE["repository"]
 output = ROOT / "release/personal" / args.target
 output.mkdir(parents=True, exist_ok=True)
+# Each build replaces the last; older versions' artifacts and blockmaps only take up space.
+for stale in output.iterdir():
+    if stale.is_file() and "-personal." in stale.name and f"{RELEASE['version']}-" not in stale.name:
+        stale.unlink()
 lock_dir = ROOT / ".t3"
 lock_dir.mkdir(exist_ok=True)
 with (lock_dir / "personal-build.lock").open("w") as lock:
