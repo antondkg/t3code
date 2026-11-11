@@ -208,9 +208,16 @@ describe("resolveMergeReadiness", () => {
       signoff: [],
     });
     expect(
-      resolveMergeReadiness([link(3, { checksState: "pending" })], { stackPending: new Set([3]) })
-        ?.stackPending,
+      resolveMergeReadiness([link(3, { checksState: "pending" })], {
+        ci: new Map([[3, "stack-pending"]]),
+      })?.stackPending,
     ).toEqual([3]);
+    // Details judge by required checks, so a rollup failed by an optional one is not failing.
+    expect(
+      resolveMergeReadiness([link(7, { checksState: "failing" })], {
+        ci: new Map([[7, "passing"]]),
+      }),
+    ).toMatchObject({ failing: [], pending: [] });
     // A reviewer still to ask is its own blocker, apart from a review that is only waiting.
     expect(
       resolveMergeReadiness(
@@ -233,7 +240,7 @@ describe("resolveMergeReadiness", () => {
     // CI passed under a host rollup that only a reviewer's sign-off holds pending.
     expect(
       resolveMergeReadiness([link(6, { checksState: "pending" })], {
-        ciPassed: new Set([6]),
+        ci: new Map([[6, "passing"]]),
         signoff: new Set([6]),
       }),
     ).toMatchObject({ pending: [], signoff: [6] });
@@ -250,31 +257,69 @@ describe("summarizeChecks", () => {
     expect(signoffLabel(demo)).toBe("demo-verified");
   });
   it.each([
-    { name: "no checks", checks: [], expected: { kind: "none", signoffs: [] } },
+    {
+      name: "no checks",
+      checks: [],
+      expected: { kind: "none", signoffs: [], optionalFailing: [] },
+    },
     {
       name: "a failure",
       checks: [check("unit-tests", "failure"), check("lint", "success")],
-      expected: { kind: "failing", failing: [check("unit-tests", "failure")], signoffs: [] },
+      expected: {
+        kind: "failing",
+        failing: [check("unit-tests", "failure")],
+        signoffs: [],
+        optionalFailing: [],
+      },
     },
     {
       name: "only Graphite's stack check waiting",
       checks: [check("lint", "success"), check("Graphite / mergeability_check", "pending")],
-      expected: { kind: "stack-pending", passed: 1, total: 2, signoffs: [] },
+      expected: { kind: "stack-pending", passed: 1, total: 2, signoffs: [], optionalFailing: [] },
     },
     {
       name: "real CI still running",
       checks: [check("lint", "pending"), check("Graphite / mergeability_check", "pending")],
-      expected: { kind: "running", passed: 0, total: 2, signoffs: [] },
+      expected: { kind: "running", passed: 0, total: 2, signoffs: [], optionalFailing: [] },
     },
     {
       name: "everything passed, skipped jobs left out",
       checks: [check("lint", "success"), check("deploy", "skipped")],
-      expected: { kind: "passing", passed: 1, total: 1, signoffs: [] },
+      expected: { kind: "passing", passed: 1, total: 1, signoffs: [], optionalFailing: [] },
     },
     {
       name: "a status that waits on a reviewer, apart from CI",
       checks: [check("lint", "success"), demo],
-      expected: { kind: "passing", passed: 1, total: 1, signoffs: [demo] },
+      expected: { kind: "passing", passed: 1, total: 1, signoffs: [demo], optionalFailing: [] },
+    },
+    {
+      name: "only required checks deciding, when the host marks them",
+      checks: [
+        { ...check("unit-tests", "success"), required: true },
+        { ...check("E2E merge gate", "skipped"), required: true },
+        { ...check("E2E requirement", "failure"), required: false },
+      ],
+      expected: {
+        kind: "passing",
+        passed: 1,
+        total: 1,
+        signoffs: [],
+        optionalFailing: [{ ...check("E2E requirement", "failure"), required: false }],
+      },
+    },
+    {
+      name: "required checks a workflow skipped as passed",
+      checks: [
+        { ...check("E2E merge gate", "skipped"), required: true },
+        { ...check("local-qa", "failure"), required: false },
+      ],
+      expected: {
+        kind: "passing",
+        passed: 0,
+        total: 0,
+        signoffs: [],
+        optionalFailing: [{ ...check("local-qa", "failure"), required: false }],
+      },
     },
   ])("reads $name", ({ checks, expected }) => {
     expect(summarizeChecks(checks)).toEqual(expected);

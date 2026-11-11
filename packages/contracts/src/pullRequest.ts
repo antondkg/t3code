@@ -131,6 +131,17 @@ export const PullRequestCheck = Schema.Struct({
 });
 export type PullRequestCheck = typeof PullRequestCheck.Type;
 
+/**
+ * The checks that decide whether a pull request's CI passed: the ones its host requires to merge
+ * when it marks any, otherwise all of them. Optional checks still report, but do not gate.
+ */
+export function gatingPullRequestChecks<T extends { readonly required?: boolean | undefined }>(
+  checks: ReadonlyArray<T>,
+): ReadonlyArray<T> {
+  const required = checks.filter((check) => check.required === true);
+  return required.length > 0 ? required : checks;
+}
+
 export const PullRequestDeploymentState = Schema.Literals([
   "pending",
   "success",

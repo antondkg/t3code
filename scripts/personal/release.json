@@ -27,6 +27,12 @@
       "head": null,
       "summary": "Preview deploy status, Graphite links and stack approval on linked pull requests; gt submit links every stack layer.",
       "retireWhen": "Upstream shows deployments and Graphite stacks on linked pull requests."
+    },
+    {
+      "pullRequest": null,
+      "head": null,
+      "summary": "Only the checks a repository's branch rules require decide whether a pull request's CI passed; optional failures show muted.",
+      "retireWhen": "Upstream distinguishes required from optional checks in CI state."
     }
   ],
   "linuxRuntimeSha256": "cd2a3a82479d4a21e27050b138a7569d601a91a70d4a98c183df2881ef0e6eb0",

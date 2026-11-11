@@ -1,8 +1,9 @@
-import type {
-  PullRequestCheck,
-  PullRequestDeployment,
-  PullRequestLabel,
-  ThreadPullRequestLink,
+import {
+  gatingPullRequestChecks,
+  type PullRequestCheck,
+  type PullRequestDeployment,
+  type PullRequestLabel,
+  type ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import {
   threadPullRequestKeyOf,
@@ -274,17 +275,17 @@ export interface PullRequestMergeReadiness {
 export function resolveMergeReadiness(
   links: ReadonlyArray<ThreadPullRequestLink>,
   {
-    stackPending = new Set(),
+    ci = new Map(),
     noReviewer = new Set(),
-    ciPassed = new Set(),
     signoff = new Set(),
   }: {
-    /** Read from details: CI passed but for a stacking tool's wait. */
-    readonly stackPending?: ReadonlySet<number>;
+    /**
+     * Read from details: CI by the host's required checks, apart from sign-offs and a stacking
+     * tool's wait. Outranks the snapshot, whose rollup counts optional checks too.
+     */
+    readonly ci?: ReadonlyMap<number, PullRequestCiVerdict>;
     /** Read from details: no reviewer requested. */
     readonly noReviewer?: ReadonlySet<number>;
-    /** Read from details: CI passed, and only sign-off checks keep the host's rollup pending. */
-    readonly ciPassed?: ReadonlySet<number>;
     /** Read from details: a check waits on a reviewer. */
     readonly signoff?: ReadonlySet<number>;
   } = {},
@@ -293,19 +294,15 @@ export function resolveMergeReadiness(
   if (open.length === 0) return null;
   const numbers = (keep: (link: ThreadPullRequestLink) => boolean) =>
     open.filter(keep).map((link) => link.number);
+  const verdict = (link: ThreadPullRequestLink) =>
+    ci.get(link.number) ?? link.snapshot?.checksState ?? null;
   return {
     open: open.length,
-    failing: numbers((link) => link.snapshot?.checksState === "failing"),
+    failing: numbers((link) => verdict(link) === "failing"),
     pending: numbers(
-      (link) =>
-        link.snapshot?.checksState !== "failing" &&
-        link.snapshot?.checksState !== "passing" &&
-        !stackPending.has(link.number) &&
-        !ciPassed.has(link.number),
+      (link) => !["failing", "passing", "stack-pending"].includes(verdict(link) ?? ""),
     ),
-    stackPending: numbers(
-      (link) => link.snapshot?.checksState === "pending" && stackPending.has(link.number),
-    ),
+    stackPending: numbers((link) => verdict(link) === "stack-pending"),
     changesRequested: numbers((link) => link.snapshot?.reviewDecision === "changes-requested"),
     unapproved: numbers(
       (link) =>
@@ -347,6 +344,8 @@ export type PullRequestChecksSummary = (
 ) & {
   /** Pending checks a reviewer clears by hand, kept out of the CI verdict. */
   readonly signoffs: ReadonlyArray<PullRequestCheck>;
+  /** Failed checks the host does not require to merge, kept out of the CI verdict. */
+  readonly optionalFailing: ReadonlyArray<PullRequestCheck>;
 };
 
 /**
@@ -354,18 +353,44 @@ export type PullRequestChecksSummary = (
  * reviewer apart from real CI.
  */
 export function summarizeChecks(checks: ReadonlyArray<PullRequestCheck>): PullRequestChecksSummary {
-  const signoffs = checks.filter(isSignoffCheck);
-  const counted = checks.filter(
+  const gating = gatingPullRequestChecks(checks);
+  const extras = {
+    signoffs: checks.filter(isSignoffCheck),
+    optionalFailing:
+      gating === checks
+        ? []
+        : checks.filter((check) => check.required !== true && FAILED.has(check.status)),
+  };
+  const counted = gating.filter(
     (check) => check.status !== "skipped" && check.status !== "neutral" && !isSignoffCheck(check),
   );
-  if (counted.length === 0) return { kind: "none", signoffs };
+  // Required checks a workflow skips, such as a merge-queue gate, count as passed.
+  if (counted.length === 0) {
+    return gating === checks
+      ? { kind: "none", ...extras }
+      : { kind: "passing", passed: 0, total: 0, ...extras };
+  }
   const failing = counted.filter((check) => FAILED.has(check.status));
-  if (failing.length > 0) return { kind: "failing", failing, signoffs };
+  if (failing.length > 0) return { kind: "failing", failing, ...extras };
   const passed = counted.filter((check) => check.status === "success").length;
   const total = counted.length;
   const waiting = counted.filter((check) => PENDING.has(check.status));
-  if (waiting.length === 0) return { kind: "passing", passed, total, signoffs };
+  if (waiting.length === 0) return { kind: "passing", passed, total, ...extras };
   return waiting.every((check) => STACK_CHECK.test(check.name))
-    ? { kind: "stack-pending", passed, total, signoffs }
-    : { kind: "running", passed, total, signoffs };
+    ? { kind: "stack-pending", passed, total, ...extras }
+    : { kind: "running", passed, total, ...extras };
+}
+
+/** Whether CI passed, by the same rules as `summarizeChecks`, for the readiness of a stack. */
+export type PullRequestCiVerdict = "failing" | "pending" | "stack-pending" | "passing";
+
+export function ciVerdictOf(summary: PullRequestChecksSummary): PullRequestCiVerdict | null {
+  switch (summary.kind) {
+    case "none":
+      return null;
+    case "running":
+      return "pending";
+    default:
+      return summary.kind;
+  }
 }

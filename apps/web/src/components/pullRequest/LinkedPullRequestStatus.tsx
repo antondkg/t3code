@@ -52,7 +52,7 @@ function Status({
 }: {
   tone: Tone;
   icon: LucideIcon;
-  tooltip?: string;
+  tooltip?: string | undefined;
   children: ReactNode;
 }) {
   const body = (
@@ -185,12 +185,19 @@ function ChecksStatus({
   switch (summary.kind) {
     case "none":
       return null;
-    case "failing":
+    case "failing": {
+      const required = summary.failing.every((check) => check.required === true);
       return (
-        <Status tone="destructive" icon={CircleXIcon}>
-          {summary.failing.length} {summary.failing.length === 1 ? "check" : "checks"} failing
+        <Status
+          tone="destructive"
+          icon={CircleXIcon}
+          tooltip={required ? "Required to merge" : undefined}
+        >
+          {summary.failing.length}
+          {required ? " required" : ""} {summary.failing.length === 1 ? "check" : "checks"} failing
         </Status>
       );
+    }
     case "running":
       return (
         <Status tone="muted" icon={CircleDashedIcon}>
@@ -215,11 +222,36 @@ function ChecksStatus({
       );
     case "passing":
       return (
-        <Status tone="success" icon={CircleCheckIcon}>
-          CI passed {summary.passed}/{summary.total}
+        <Status
+          tone="success"
+          icon={CircleCheckIcon}
+          tooltip={
+            summary.optionalFailing.length > 0 || detail.checks.some((check) => check.required)
+              ? "Every check required to merge passed"
+              : `${summary.passed}/${summary.total} checks passed`
+          }
+        >
+          CI passed
         </Status>
       );
   }
+}
+
+/** Failed checks the host does not require, such as an advisory E2E notice. */
+function OptionalFailingStatus({ checks }: { checks: ReadonlyArray<PullRequestCheck> }) {
+  if (checks.length === 0) return null;
+  return (
+    <>
+      <Dot />
+      <Status
+        tone="muted"
+        icon={CircleXIcon}
+        tooltip={`Not required to merge: ${checks.map((check) => check.name).join(", ")}`}
+      >
+        {checks.length === 1 ? `${checks[0]?.name} failed` : `${checks.length} optional failed`}
+      </Status>
+    </>
+  );
 }
 
 function People({ actors }: { actors: ReadonlyArray<PullRequestActor> }) {
@@ -362,17 +394,18 @@ export function LinkedPullRequestStatusLine({
         "The preview deploy failed. Open its logs.",
       )
     );
-  const signoffs = detail === null ? [] : summarizeChecks(detail.checks).signoffs;
+  const summary = detail === null ? null : summarizeChecks(detail.checks);
   return (
     <>
       <ChecksStatus detail={detail} snapshot={snapshot} />
+      <OptionalFailingStatus checks={summary?.optionalFailing ?? []} />
       {snapshot !== null ? (
         <>
           <Dot />
           <ReviewStatus snapshot={snapshot} detail={detail} />
         </>
       ) : null}
-      <SignoffStatus checks={signoffs} rowLink={rowLink} />
+      <SignoffStatus checks={summary?.signoffs ?? []} rowLink={rowLink} />
       {deployStatus === null ? null : (
         <>
           <Dot />
