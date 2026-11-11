@@ -6,9 +6,10 @@
   "upstreamCommit": "6577c6b6185167c0e502fa01f9e8e8f2dee6ff25",
   "patches": [
     {
-      "pullRequest": "https://github.com/pingdotgg/t3code/pull/22155",
-      "head": "3735605596ce3402b6a13cb31ae4657cfe63c2b9",
-      "retireWhen": "An upstream release includes native ACP history import and its cleanup and replay fixes."
+      "pullRequest": null,
+      "head": null,
+      "summary": "Follow-ups to upstream's native ACP history import (#22155): imported sessions keep their native model and effort, and OpenCode history stays complete and refreshes.",
+      "retireWhen": "Upstream keeps native model and effort on import and refreshes complete OpenCode history."
     },
     {
       "pullRequest": null,
