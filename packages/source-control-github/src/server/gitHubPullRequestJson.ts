@@ -39,6 +39,7 @@ import type {
   PullRequestState,
   PullRequestThreadComment,
 } from "@t3tools/contracts";
+import { gatingPullRequestChecks } from "@t3tools/contracts";
 import { quoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 import {
@@ -669,10 +670,18 @@ function toCheckEntries(raw: ReadonlyArray<CheckFields> | null | undefined): Rea
 function rollupChecksState(
   raw: ReadonlyArray<CheckFields> | null | undefined,
 ): PullRequestChecksState | null {
-  return rollupCheckStatuses([
-    ...toChecks(raw).map((check) => check.status),
-    ...(raw ?? []).filter(isNamelessCheck).map((check) => toCheckStatus(check)),
-  ]);
+  const checks = toChecks(raw);
+  const gating = gatingPullRequestChecks(checks);
+  // Required checks a workflow skips count as passed, as GitHub's merge rules treat them.
+  const requiredOnly = gating !== checks;
+  const statuses = [
+    ...gating.map((check) => check.status),
+    ...(requiredOnly
+      ? []
+      : (raw ?? []).filter(isNamelessCheck).map((check) => toCheckStatus(check))),
+  ];
+  const state = rollupCheckStatuses(statuses);
+  return state === null && requiredOnly && statuses.length > 0 ? "passing" : state;
 }
 
 function toChecks(

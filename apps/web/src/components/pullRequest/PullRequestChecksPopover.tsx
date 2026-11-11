@@ -6,6 +6,7 @@ import type {
   PullRequestRef,
   ScopedThreadRef,
 } from "@t3tools/contracts";
+import { gatingPullRequestChecks } from "@t3tools/contracts";
 import { useState } from "react";
 
 import { useOpenLink } from "~/browser/useOpenLink";
@@ -61,9 +62,16 @@ function ChecksBody({
 }) {
   const openLink = useOpenLink(threadRef);
   const [showAll, setShowAll] = useState(false);
-  const { attention, running, completed } = groupPullRequestChecks(checks);
-  const canCollapse = attention.length + running.length > 0 && completed.length > 0;
-  const visibleChecks = [...attention, ...running, ...(showAll || !canCollapse ? completed : [])];
+  const { attention, running, optional, completed } = groupPullRequestChecks(checks);
+  const canCollapse =
+    attention.length + running.length + optional.length > 0 && completed.length > 0;
+  const optionalSet = new Set(optional);
+  const visibleChecks = [
+    ...attention,
+    ...running,
+    ...optional,
+    ...(showAll || !canCollapse ? completed : []),
+  ];
   const hasDetails = visibleChecks.some((check) => check.url !== null);
   if (checks.length === 0) {
     return <p className="text-muted-foreground text-xs">No checks reported</p>;
@@ -92,6 +100,7 @@ function ChecksBody({
                 </Tooltip>
                 <span className="justify-self-end whitespace-nowrap text-muted-foreground">
                   {pullRequestCheckStatusLabel(check)}
+                  {optionalSet.has(check) ? " (optional)" : ""}
                 </span>
                 {check.url === null ? null : (
                   <button
@@ -152,9 +161,9 @@ export function PullRequestChecksPopover({
   const incompleteCount =
     checks?.filter((check) => check.status === "pending" || check.status === "action-required")
       .length ?? 0;
-  const failedCount =
-    checks?.filter((check) => check.status === "failure" || check.status === "cancelled").length ??
-    0;
+  const failedCount = (checks === undefined ? [] : gatingPullRequestChecks(checks)).filter(
+    (check) => check.status === "failure" || check.status === "cancelled",
+  ).length;
   const summary = checks === undefined || stale ? null : summarizePullRequestChecks(checks);
   return (
     <Popover>

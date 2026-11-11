@@ -15,6 +15,7 @@ import {
 import * as Schema from "effect/Schema";
 import {
   GitCommandError,
+  gatingPullRequestChecks,
   PullRequestDetail,
   PullRequestOperationError,
   type PullRequestAction,
@@ -321,7 +322,11 @@ export function classifyPullRequestChecks(
   checks: ReadonlyArray<PullRequestCheck>,
 ): PullRequestChecksState {
   if (checks.length === 0) return "none";
-  if (checks.some((check) => check.status === "failure" || check.status === "cancelled")) {
+  if (
+    gatingPullRequestChecks(checks).some(
+      (check) => check.status === "failure" || check.status === "cancelled",
+    )
+  ) {
     return "failing";
   }
   if (checks.some((check) => check.status === "pending" || check.status === "action-required")) {
@@ -332,9 +337,11 @@ export function classifyPullRequestChecks(
 
 export function describePullRequestChecks(checks: ReadonlyArray<PullRequestCheck>): string {
   if (checks.length === 0) return "No checks reported";
-  const failed = checks.filter(
-    (check) => check.status === "failure" || check.status === "cancelled",
-  ).length;
+  const isFailed = (check: PullRequestCheck) =>
+    check.status === "failure" || check.status === "cancelled";
+  const gating = gatingPullRequestChecks(checks);
+  const failed = gating.filter(isFailed).length;
+  const optionalFailed = gating === checks ? 0 : checks.filter(isFailed).length - failed;
   const pending = checks.filter((check) => check.status === "pending").length;
   const actionRequired = checks.filter((check) => check.status === "action-required").length;
   const passed = checks.filter((check) => check.status === "success").length;
@@ -342,8 +349,15 @@ export function describePullRequestChecks(checks: ReadonlyArray<PullRequestCheck
   if (pending > 0) parts.push(`${pending} of ${checks.length} running`);
   if (actionRequired > 0) parts.push(`${actionRequired} of ${checks.length} awaiting action`);
   if (failed > 0) {
-    parts.push(parts.length > 0 ? `${failed} failed` : `${failed} of ${checks.length} failing`);
+    const required = gating === checks ? "" : " required";
+    parts.push(
+      parts.length > 0
+        ? `${failed}${required} failed`
+        : `${failed} of ${gating.length}${required} failing`,
+    );
   }
+  if (parts.length === 0 && gating !== checks) parts.push("Required checks passed");
+  if (optionalFailed > 0) parts.push(`${optionalFailed} optional failing`);
   if (parts.length === 0) {
     return passed === checks.length ? "All checks passed" : `${passed} of ${checks.length} passing`;
   }
@@ -351,11 +365,15 @@ export function describePullRequestChecks(checks: ReadonlyArray<PullRequestCheck
 }
 
 export function groupPullRequestChecks(checks: ReadonlyArray<PullRequestCheck>) {
+  const gating = new Set(gatingPullRequestChecks(checks));
+  const failed = (check: PullRequestCheck) => ["failure", "cancelled"].includes(check.status);
   return {
-    attention: checks.filter((check) =>
-      ["failure", "cancelled", "action-required"].includes(check.status),
+    attention: checks.filter(
+      (check) => check.status === "action-required" || (failed(check) && gating.has(check)),
     ),
     running: checks.filter((check) => check.status === "pending"),
+    /** Failed, but the host does not require them to merge. */
+    optional: checks.filter((check) => failed(check) && !gating.has(check)),
     completed: checks.filter((check) => ["success", "skipped", "neutral"].includes(check.status)),
   };
 }

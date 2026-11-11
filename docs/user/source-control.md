@@ -372,7 +372,9 @@ approvers or the reviewers it waits on (or that nobody is assigned), its deploy 
 it. A layer whose only waiting check is Graphite's stack check shows **CI passed** and **stack check
 pending**. A check that waits on a reviewer rather than a job, such as a status saying a reviewer must
 watch a demo and add a label, is left out of CI and shows as **demo to watch** (or **needs sign-off**)
-next to the review, linked to its run. When every open layer passes and is approved, **Merge stack with Graphite** runs
+next to the review, linked to its run. When the repository's branch rules require specific checks,
+only those decide whether CI passed, here and in the pull request view; other failed checks show
+muted as optional. When every open layer passes and is approved, **Merge stack with Graphite** runs
 `gt merge --confirm` in a terminal in the thread's checkout, and **Ask agent to merge** puts a merge
 request in the composer.
 

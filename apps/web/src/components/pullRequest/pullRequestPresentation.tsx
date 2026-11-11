@@ -9,6 +9,7 @@ import type {
   PullRequestReviewDecision,
   PullRequestState,
 } from "@t3tools/contracts";
+import { gatingPullRequestChecks } from "@t3tools/contracts";
 import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 import {
   CircleCheckIcon,
@@ -281,10 +282,12 @@ export function pullRequestChecksState(
   checks: ReadonlyArray<PullRequestCheck>,
 ): PullRequestChecksState | null {
   if (checks.length === 0) return null;
-  const statuses = new Set(checks.map((check) => check.status));
+  const gating = gatingPullRequestChecks(checks);
+  const statuses = new Set(gating.map((check) => check.status));
   if (statuses.has("failure") || statuses.has("cancelled")) return "failing";
   if (statuses.has("pending") || statuses.has("action-required")) return "pending";
-  return statuses.has("success") ? "passing" : null;
+  // Required checks a workflow skips count as passed, as the host's merge rules treat them.
+  return statuses.has("success") || gating !== checks ? "passing" : null;
 }
 
 const REVIEW_OUTCOME_PRESENTATION = {
@@ -546,17 +549,29 @@ export function PullRequestMetaLine({
   );
 }
 
+const isFailedCheck = (check: PullRequestCheck) =>
+  check.status === "failure" || check.status === "cancelled";
+
 export function summarizePullRequestChecks(checks: ReadonlyArray<PullRequestCheck>): string {
   if (checks.length === 0) return "No checks reported";
   const actionRequired = checks.filter((check) => check.status === "action-required");
   const workflowApprovalRequired = actionRequired.filter(isWorkflowApprovalCheck).length;
   const otherActionRequired = actionRequired.length - workflowApprovalRequired;
-  const failed = checks.filter(
-    (check) => check.status === "failure" || check.status === "cancelled",
-  ).length;
+  const gating = gatingPullRequestChecks(checks);
+  const failed = gating.filter(isFailedCheck).length;
   const pending = checks.filter((check) => check.status === "pending").length;
   const passed = checks.filter((check) => check.status === "success").length;
-  if (failed > 0) return `${failed} of ${checks.length} failing`;
+  if (failed > 0) {
+    return gating === checks
+      ? `${failed} of ${checks.length} failing`
+      : `${failed} of ${gating.length} required failing`;
+  }
+  if (gating !== checks && !gating.some((check) => check.status === "pending")) {
+    const optional = checks.filter(isFailedCheck).length;
+    return optional > 0
+      ? `Required checks passed · ${optional} optional failing`
+      : "Required checks passed";
+  }
   if (workflowApprovalRequired > 0 && otherActionRequired > 0) {
     return `${workflowApprovalRequired} ${workflowApprovalRequired === 1 ? "workflow" : "workflows"} and ${otherActionRequired} ${otherActionRequired === 1 ? "check" : "checks"} awaiting action`;
   }

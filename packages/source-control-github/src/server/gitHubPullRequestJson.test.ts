@@ -554,6 +554,27 @@ describe("pull request detail decoding", () => {
     expect(detail.checksState).toBe("pending");
   });
 
+  it("lets only required checks decide the state when the host marks them", () => {
+    const required = (name: string, conclusion: string) =>
+      check({ name, status: "COMPLETED", conclusion, isRequired: true });
+    const optional = check({
+      name: "E2E requirement",
+      status: "COMPLETED",
+      conclusion: "FAILURE",
+      isRequired: false,
+    });
+
+    expect(
+      detailOf([required("unit-tests", "SUCCESS"), required("E2E merge gate", "SKIPPED"), optional])
+        .checksState,
+    ).toBe("passing");
+    expect(detailOf([required("unit-tests", "FAILURE"), optional]).checksState).toBe("failing");
+    expect(
+      detailOf([check({ name: "lint", status: "COMPLETED", conclusion: "SUCCESS" }), optional])
+        .checksState,
+    ).toBe("failing");
+  });
+
   it("reads an auto-merge request and strategy, and its null as off", () => {
     expect(detailOf([], { autoMergeRequest: { mergeMethod: "SQUASH" } })).toMatchObject({
       autoMergeEnabled: true,

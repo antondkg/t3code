@@ -12,7 +12,7 @@ import { AsyncResult, Atom } from "effect/reactivity";
 
 import { pullRequestEnvironment } from "~/state/pullRequests";
 
-import { summarizeChecks } from "./pullRequestDeploy.logic";
+import { ciVerdictOf, summarizeChecks, type PullRequestCiVerdict } from "./pullRequestDeploy.logic";
 
 const MAX_STACK_DETAILS = 20;
 
@@ -58,8 +58,8 @@ function useLinkedPullRequestDetails(
 }
 
 /**
- * Open linked pull requests whose CI passed except for a stacking tool's wait on the layers
- * below, read from their details. Capped, since each one is a detail read.
+ * What open linked pull requests' details say about merging: CI by required checks, reviewers and
+ * sign-offs. Capped, since each one is a detail read.
  */
 export function useStackPendingNumbers(
   environmentId: EnvironmentId,
@@ -67,11 +67,10 @@ export function useStackPendingNumbers(
   projects: ReadonlyArray<EnvironmentProject>,
   fallbackProjectId: ProjectId | null,
 ): {
-  readonly stackPending: ReadonlySet<number>;
+  /** CI by the host's required checks, for those whose details have loaded. */
+  readonly ci: ReadonlyMap<number, PullRequestCiVerdict>;
   /** Not yet approved or blocked, and nobody asked to review. */
   readonly noReviewer: ReadonlySet<number>;
-  /** CI passed; only checks that wait on a reviewer keep the host's rollup pending. */
-  readonly ciPassed: ReadonlySet<number>;
   /** A check waits on a reviewer, such as watching a demo. */
   readonly signoff: ReadonlySet<number>;
   readonly details: ReadonlyArray<PullRequestDetail | null>;
@@ -102,8 +101,12 @@ export function useStackPendingNumbers(
   return {
     details,
     noReviewer: numbersWhere(({ detail }) => detail.reviewers.length === 0),
-    stackPending: numbersWhere(({ summary }) => summary.kind === "stack-pending"),
-    ciPassed: numbersWhere(({ summary }) => summary.kind === "passing"),
+    ci: new Map(
+      summaries.flatMap(({ detail, summary }) => {
+        const verdict = ciVerdictOf(summary);
+        return verdict === null ? [] : [[detail.number, verdict] as const];
+      }),
+    ),
     signoff: numbersWhere(({ summary }) => summary.signoffs.length > 0),
   };
 }
