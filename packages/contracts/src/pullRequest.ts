@@ -133,14 +133,22 @@ export type PullRequestCheck = typeof PullRequestCheck.Type;
 
 /**
  * The checks that decide whether a pull request's CI passed: the ones its host requires to merge
- * when it marks any, otherwise all of them. Optional checks still report, but do not gate.
+ * when it marks any, otherwise all but those whose status calls itself optional. Branch rules
+ * often cover only the default branch, so upper stack layers carry no required marks.
  */
-export function gatingPullRequestChecks<T extends { readonly required?: boolean | undefined }>(
-  checks: ReadonlyArray<T>,
-): ReadonlyArray<T> {
+export function gatingPullRequestChecks<
+  T extends {
+    readonly required?: boolean | undefined;
+    readonly description?: string | null | undefined;
+  },
+>(checks: ReadonlyArray<T>): ReadonlyArray<T> {
   const required = checks.filter((check) => check.required === true);
-  return required.length > 0 ? required : checks;
+  if (required.length > 0) return required;
+  const declared = checks.filter((check) => !SELF_DECLARED_OPTIONAL.test(check.description ?? ""));
+  return declared.length === checks.length ? checks : declared;
 }
+
+const SELF_DECLARED_OPTIONAL = /^\s*optional\b/iu;
 
 export const PullRequestDeploymentState = Schema.Literals([
   "pending",

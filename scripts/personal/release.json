@@ -26,13 +26,13 @@
     {
       "pullRequest": null,
       "head": null,
-      "summary": "Preview deploy status, Graphite links and stack approval on linked pull requests, with E2E read from each stack's top and lines split into code and tests; gt submit links every stack layer.",
+      "summary": "Preview deploy status, Graphite links and stack approval on linked pull requests, with E2E read from each stack's top, linear stacks listed flat and top first like Graphite, and lines split into code and tests; gt submit links every stack layer.",
       "retireWhen": "Upstream shows deployments and Graphite stacks on linked pull requests."
     },
     {
       "pullRequest": null,
       "head": null,
-      "summary": "Only the checks a repository's branch rules require decide whether a pull request's CI passed; optional failures show muted.",
+      "summary": "Only the checks a repository's branch rules require decide whether a pull request's CI passed; optional failures show muted, and on stack layers without branch rules a check whose status says it is optional stops gating.",
       "retireWhen": "Upstream distinguishes required from optional checks in CI state."
     }
   ],

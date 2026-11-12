@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
   legacyThreadPullRequestKey,
+  pullRequestListLines,
   threadPullRequestSearchTerms,
   resolveThreadCurrentPullRequest,
   resolveThreadPullRequestChains,
@@ -202,6 +203,15 @@ describe("resolveThreadPullRequestChains", () => {
       ["derived", [1, 2, 3]],
       ["derived", [9]],
     ]);
+    // A linear stack lists flat and top first, like Graphite.
+    expect(
+      pullRequestListLines(chains).map((line) => [line.link.number, line.depth, line.stacked]),
+    ).toEqual([
+      [3, 0, false],
+      [2, 0, true],
+      [1, 0, true],
+      [9, 0, false],
+    ]);
   });
 
   it("keeps every link built on the same parent under it", () => {
@@ -222,6 +232,16 @@ describe("resolveThreadPullRequestChains", () => {
         [0, 1, 1, 2, 2],
       ],
       [[9], [0]],
+    ]);
+    expect(
+      pullRequestListLines(chains).map((line) => [line.link.number, line.depth, line.stacked]),
+    ).toEqual([
+      [5, 0, false],
+      [6, 1, true],
+      [1, 1, true],
+      [3, 2, true],
+      [2, 2, true],
+      [9, 0, false],
     ]);
     expect(resolveThreadPullRequestBadge(links.slice(0, 5))).toEqual({
       kind: "stack",

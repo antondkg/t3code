@@ -673,7 +673,7 @@ function rollupChecksState(
   const checks = toChecks(raw);
   const gating = gatingPullRequestChecks(checks);
   // Required checks a workflow skips count as passed, as GitHub's merge rules treat them.
-  const requiredOnly = gating !== checks;
+  const requiredOnly = gating.some((check) => check.required === true);
   const statuses = [
     ...gating.map((check) => check.status),
     ...(requiredOnly

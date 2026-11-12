@@ -573,6 +573,19 @@ describe("pull request detail decoding", () => {
       detailOf([check({ name: "lint", status: "COMPLETED", conclusion: "SUCCESS" }), optional])
         .checksState,
     ).toBe("failing");
+    const declaredOptional = check({
+      __typename: "StatusContext",
+      context: "E2E requirement",
+      state: "FAILURE",
+      description: "Optional: no E2E run for the current commit",
+    });
+    // An upper stack layer: rules cover only the default branch, so nothing is marked required.
+    expect(
+      detailOf([
+        check({ name: "lint", status: "COMPLETED", conclusion: "SUCCESS" }),
+        declaredOptional,
+      ]).checksState,
+    ).toBe("passing");
   });
 
   it("reads an auto-merge request and strategy, and its null as off", () => {

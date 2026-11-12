@@ -354,14 +354,31 @@ export function makeThreadPullRequests(
 
 export interface PullRequestListLine {
   readonly link: ThreadPullRequestLink;
+  /** Indent level: grows only where a layer has siblings, so a linear stack stays flat. */
   readonly depth: number;
   readonly chainKey: string;
+  /** Carries the stack summary on the chain's first listed line. */
   readonly stack: { readonly kind: ThreadPullRequestChain["kind"]; readonly size: number } | null;
+  /** A layer of a multi-layer chain listed under its first line. */
+  readonly stacked: boolean;
 }
 
 function chainKeyOf(chain: ThreadPullRequestChain): string {
   const bottom = chain.layers[0]!;
   return `${bottom.host}/${bottom.repository}#${bottom.number}`;
+}
+
+function branchIndents(depths: ReadonlyArray<number>): ReadonlyArray<number> {
+  const parents = depths.map((depth, index) => {
+    for (let at = index - 1; at >= 0; at -= 1) if (depths[at] === depth - 1) return at;
+    return -1;
+  });
+  const childCounts = depths.map((_, index) => parents.filter((parent) => parent === index).length);
+  const indents: Array<number> = [];
+  for (const parent of parents) {
+    indents.push(parent < 0 ? 0 : indents[parent]! + (childCounts[parent]! > 1 ? 1 : 0));
+  }
+  return indents;
 }
 
 export function pullRequestListLines(
@@ -374,14 +391,16 @@ export function pullRequestListLines(
   );
   return ordered.flatMap((chain) => {
     const chainKey = chainKeyOf(chain);
-    return chain.layers.map((link, index) => ({
-      link,
-      depth: chain.depths[index]!,
+    const indents = branchIndents(chain.depths);
+    const entries = chain.layers.map((link, index) => ({ link, depth: indents[index]! }));
+    // A linear stack reads top first, like Graphite; a branched one keeps its tree order.
+    if (indents.every((indent) => indent === 0)) entries.reverse();
+    const stacked = chain.layers.length > 1;
+    return entries.map((entry, index) => ({
+      ...entry,
       chainKey,
-      stack:
-        index === 0 && chain.layers.length > 1
-          ? { kind: chain.kind, size: chain.layers.length }
-          : null,
+      stack: index === 0 && stacked ? { kind: chain.kind, size: chain.layers.length } : null,
+      stacked: stacked && index > 0,
     }));
   });
 }
