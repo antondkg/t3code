@@ -21,6 +21,9 @@ USERDATA = Path.home() / ".t3/userdata"
 BACKUPS = Path.home() / ".t3/personal-backups"
 KEEP_BACKUPS = 2
 HELPER_PID = BACKUPS / "install.pid"
+# Quitting T3 can take down processes it started, so launchd owns the helper that swaps the app.
+INSTALL_LABEL = "com.antondkg.t3-personal-install"
+INSTALL_PLIST = BACKUPS / "install.plist"
 SCHEDULE_LABEL = "com.antondkg.t3-personal-upgrade"
 SCHEDULE_PLIST = Path.home() / f"Library/LaunchAgents/{SCHEDULE_LABEL}.plist"
 SCHEDULE_LOG = Path.home() / "Library/Logs/t3-personal-upgrade.log"
@@ -206,6 +209,7 @@ def back_up_userdata(target):
 
 def finish_install(new_app):
     new_app = Path(new_app)
+    HELPER_PID.write_text(str(os.getpid()))
     while t3_running():
         time.sleep(1)
     # A newer build stops only helpers still waiting, never one moving the app.
@@ -253,12 +257,28 @@ def install_mac(version, unattended):
         finish_install(new_app)
         return
     log = BACKUPS / "install.log"
-    with log.open("a") as handle:
-        helper = subprocess.Popen([sys.executable, __file__, "--finish-install", str(new_app)],
-                                  stdout=handle, stderr=handle, start_new_session=True)
-    HELPER_PID.write_text(str(helper.pid))
+    arm_install_helper(new_app, log)
     message = f"T3 {version} is ready. Quit T3 to install it; it reopens on its own."
     notify(message) if unattended else print(f"{message} Log: {log}")
+
+
+def arm_install_helper(new_app, log):
+    domain = f"gui/{os.getuid()}"
+    target = f"{domain}/{INSTALL_LABEL}"
+    # A helper already moving the app has dropped its pid file; let it finish first.
+    while "state = running" in subprocess.run(["launchctl", "print", target],
+                                               capture_output=True, text=True).stdout:
+        time.sleep(1)
+    subprocess.run(["launchctl", "bootout", target], stderr=subprocess.DEVNULL, check=False)
+    INSTALL_PLIST.write_bytes(plistlib.dumps({
+        "Label": INSTALL_LABEL,
+        "ProgramArguments": [sys.executable, str(Path(__file__).resolve()),
+                             "--finish-install", str(new_app)],
+        "RunAtLoad": True,
+        "StandardOutPath": str(log),
+        "StandardErrorPath": str(log),
+    }))
+    run("launchctl", "bootstrap", domain, str(INSTALL_PLIST))
 
 
 def schedule(at, args):
