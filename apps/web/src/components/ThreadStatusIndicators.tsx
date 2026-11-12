@@ -428,7 +428,7 @@ function ThreadPullRequestMiniListItem({
     </>
   );
   return (
-    <li style={{ paddingLeft: `${Math.min(depth, 3) * 0.75}rem` }}>
+    <li style={{ paddingLeft: `${depth * 0.375}rem` }}>
       {onOpenPullRequest ? (
         <a
           href={url}
