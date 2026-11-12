@@ -63,7 +63,7 @@ export const LinkedPullRequestRow = memo(function LinkedPullRequestRow(props: {
   readonly openPullRequest: (url: string) => Promise<boolean>;
   readonly actions: LinkedPullRequestActions | null;
 }) {
-  const { link, depth, stack } = props.line;
+  const { link, depth, stack, stacked } = props.line;
   const snapshot = link.snapshot;
   const status = snapshot === null ? null : pullRequestStatus(snapshot);
   const conflict = snapshot === null ? null : pullRequestConflict(snapshot);
@@ -95,10 +95,10 @@ export const LinkedPullRequestRow = memo(function LinkedPullRequestRow(props: {
             Dialog.alert(`Unable to open ${shortLabel}`, `The ${singular} could not be opened.`);
         });
       }}
-      style={{ paddingLeft: 16 + Math.min(depth, 3) * 16 }}
+      style={{ paddingLeft: 16 + Math.min(depth + (stacked ? 1 : 0), 4) * 16 }}
       className="flex-row gap-3 rounded-xl pr-4 active:bg-row-hover"
     >
-      {depth > 0 ? <View className="-ml-2 w-px self-stretch bg-border" /> : null}
+      {stacked ? <View className="-ml-2 w-px self-stretch bg-border" /> : null}
       <View className="self-start pt-2.5">
         <SymbolView
           name={status?.icon ?? PullRequestGlyph.pullRequest}
