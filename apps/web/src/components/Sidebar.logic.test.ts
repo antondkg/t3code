@@ -16,6 +16,7 @@ import {
   resolveSidebarSweepKeys,
   resolveSidebarRowStatus,
   resolveSidebarThreadStatus,
+  splitWorkingShelf,
   resolveThreadStatusPill,
   resolveWindowTitleThreadStatus,
   resolveWorkingStartedAt,
@@ -204,6 +205,16 @@ describe("resolveSidebarThreadStatus", () => {
         runtime,
       }),
     ).toBe("approval");
+  });
+
+  it("lists running threads above blocked and idle ones in the Working shelf", () => {
+    const blocked = { ...idle, runtime, blockedOnThreadWait: true };
+    const running = { ...idle, runtime };
+    const parked = { ...idle, runtime: { ...runtime, status: "idle" as const } };
+    expect(splitWorkingShelf([blocked, running, parked])).toEqual({
+      busy: [running],
+      waiting: [blocked, parked],
+    });
   });
 
   it("shows a waiting guest message as a Request, below the agent's own requests", () => {

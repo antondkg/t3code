@@ -145,3 +145,20 @@ export function SidebarSectionHeader(props: {
     </SortableSidebarMarker>
   );
 }
+
+/** Splits the Working shelf: threads an agent is running above, waiting ones below. */
+export function SidebarWaitingDivider(props: { count: number }) {
+  return (
+    <SortableSidebarMarker
+      marker="waiting-divider"
+      data-testid="sidebar-waiting-divider"
+      className="pointer-events-none mx-0.5"
+    >
+      <div className="flex h-6 items-center gap-2 px-2 text-xs text-sidebar-foreground/60">
+        <span className="shrink-0 font-medium">Waiting</span>
+        <span className="shrink-0 tabular-nums">{props.count}</span>
+        <span aria-hidden className="h-px flex-1 bg-sidebar-foreground/15" />
+      </div>
+    </SortableSidebarMarker>
+  );
+}
