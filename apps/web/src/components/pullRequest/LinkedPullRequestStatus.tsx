@@ -260,7 +260,10 @@ function EndToEndStatus({
 }) {
   const e2e = resolveEndToEnd(checks);
   if (e2e === null) return null;
-  const { tone, label } = END_TO_END_PRESENTATION[e2e.state];
+  const presentation = END_TO_END_PRESENTATION[e2e.state];
+  // A lone pull request may skip optional E2E; only a stack's top must run it.
+  const tone = !stacked && e2e.state === "not-run" ? "attention" : presentation.tone;
+  const { label } = presentation;
   const icon = E2E_ICON[e2e.state];
   const tooltip = [stacked ? "Top of the stack: this run covers every layer." : null, e2e.detail]
     .filter(Boolean)
