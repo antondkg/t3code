@@ -131,6 +131,9 @@ tar -xzf "$archive" -C "$staging" --strip-components=1
 printf '%s\\n' {version} > "$staging/.install-complete"
 rm -rf "$HOME/.t3/runtime/versions/{version}"
 mv "$staging" "$HOME/.t3/runtime/versions/{version}"
+# A running server prunes runtimes nothing references once they are an hour old; the launcher counts.
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$HOME/.t3/runtime/versions/{version}/t3" "$HOME/.local/bin/t3"
 # Keep this runtime and the one before it, and any other a running server still executes.
 ls -1t "$HOME/.t3/runtime/versions" | grep -v '^[.]' | tail -n +3 | while read -r old; do
   pgrep -f "[r]untime/versions/$old/" >/dev/null || rm -rf "$HOME/.t3/runtime/versions/$old"
