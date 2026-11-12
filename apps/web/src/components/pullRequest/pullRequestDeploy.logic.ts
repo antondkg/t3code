@@ -429,11 +429,12 @@ export function resolveEndToEnd(
     : { state: "passed", url: first.url, detail: `${runs.length} E2E checks passed` };
 }
 
+/** Red on a stack's top whenever E2E has not passed: its run is the one that covers the stack. */
 export const END_TO_END_PRESENTATION = {
   passed: { tone: "success", label: "E2E passed" },
   failed: { tone: "destructive", label: "E2E failed" },
   running: { tone: "muted", label: "E2E running" },
-  "not-run": { tone: "attention", label: "E2E not run" },
+  "not-run": { tone: "destructive", label: "E2E not run" },
   "not-needed": { tone: "muted", label: "no E2E needed" },
 } as const satisfies Record<
   PullRequestEndToEnd["state"],
