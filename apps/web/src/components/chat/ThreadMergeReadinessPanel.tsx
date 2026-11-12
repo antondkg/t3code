@@ -1,5 +1,8 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { visibleThreadPullRequests } from "@t3tools/client-runtime/thread-pull-requests";
+import {
+  resolveThreadPullRequestChains,
+  visibleThreadPullRequests,
+} from "@t3tools/client-runtime/thread-pull-requests";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
   CircleCheckIcon,
@@ -17,7 +20,12 @@ import { cn } from "~/lib/utils";
 import { useProjects, useQuietThreadShell } from "~/state/entities";
 
 import { useStackPendingNumbers } from "../pullRequest/linkedPullRequestDetails";
-import { resolveMergeReadiness } from "../pullRequest/pullRequestDeploy.logic";
+import { E2E_ICON } from "../pullRequest/LinkedPullRequestStatus";
+import {
+  END_TO_END_PRESENTATION,
+  resolveMergeReadiness,
+  resolveTopEndToEnd,
+} from "../pullRequest/pullRequestDeploy.logic";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 
 const list = (numbers: ReadonlyArray<number>) => numbers.map((number) => `#${number}`).join(" ");
@@ -38,6 +46,7 @@ export function ThreadMergeReadinessPanel(props: {
   );
   const readiness = resolveMergeReadiness(links, readinessSignals);
   if (readiness === null) return null;
+  const tops = resolveTopEndToEnd(resolveThreadPullRequestChains(links), readinessSignals.details);
   const {
     open,
     failing,
@@ -122,6 +131,14 @@ export function ThreadMergeReadinessPanel(props: {
             ) : null}
           </>
         )}
+        {tops.map(({ number, e2e }) => (
+          <ReadinessLine
+            key={number}
+            tone={e2e === null ? "muted" : END_TO_END_PRESENTATION[e2e.state].tone}
+            icon={e2e === null ? CircleDashedIcon : E2E_ICON[e2e.state]}
+            text={`Top of stack #${number}: ${e2e === null ? "no E2E reported" : END_TO_END_PRESENTATION[e2e.state].label}`}
+          />
+        ))}
         {signoff.length > 0 ? (
           <ReadinessLine
             tone="muted"
@@ -140,7 +157,7 @@ function ReadinessLine({
   text,
   strong = false,
 }: {
-  tone: "success" | "destructive" | "muted";
+  tone: "success" | "destructive" | "muted" | "attention";
   icon: LucideIcon;
   text: string;
   strong?: boolean;
@@ -152,6 +169,7 @@ function ReadinessLine({
         tone === "success" && "text-success-foreground",
         tone === "destructive" && "text-destructive",
         tone === "muted" && "text-muted-foreground",
+        tone === "attention" && "text-warning-foreground",
         strong && "rounded-md bg-success/10 px-2 py-1 font-medium",
       )}
     >

@@ -2,6 +2,7 @@ import {
   gatingPullRequestChecks,
   type PullRequestCheck,
   type PullRequestDeployment,
+  type PullRequestDetail,
   type PullRequestLabel,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
@@ -335,6 +336,15 @@ const isSignoffCheck = (check: PullRequestCheck) =>
 export const signoffLabel = (check: PullRequestCheck): string | null =>
   SIGNOFF_LABEL.exec(check.description ?? "")?.[1] ?? null;
 
+// Checks that run end-to-end tests (`Dashboard / E2E`, `run-e2e-tests`) or say whether the head's
+// E2E is verified (`E2E requirement`). A merge-queue gate only runs once the stack lands.
+const E2E_CHECK = /\be2e\b|end[-_ ]to[-_ ]end/iu;
+const E2E_VERDICT = /\brequirement\b/iu;
+const E2E_GATE = /\bgate\b/iu;
+const E2E_NOT_NEEDED = /\bno\b[^.]*\b(?:required|needed)\b/iu;
+
+const isEndToEndCheck = (check: PullRequestCheck) => E2E_CHECK.test(check.name);
+
 export type PullRequestChecksSummary = (
   | { readonly kind: "none" }
   | { readonly kind: "failing"; readonly failing: ReadonlyArray<PullRequestCheck> }
@@ -359,7 +369,11 @@ export function summarizeChecks(checks: ReadonlyArray<PullRequestCheck>): PullRe
     optionalFailing:
       gating === checks
         ? []
-        : checks.filter((check) => check.required !== true && FAILED.has(check.status)),
+        : // E2E reads apart, on the stack's top; see `resolveEndToEnd`.
+          checks.filter(
+            (check) =>
+              check.required !== true && FAILED.has(check.status) && !isEndToEndCheck(check),
+          ),
   };
   const counted = gating.filter(
     (check) => check.status !== "skipped" && check.status !== "neutral" && !isSignoffCheck(check),
@@ -379,6 +393,84 @@ export function summarizeChecks(checks: ReadonlyArray<PullRequestCheck>): PullRe
   return waiting.every((check) => STACK_CHECK.test(check.name))
     ? { kind: "stack-pending", passed, total, ...extras }
     : { kind: "running", passed, total, ...extras };
+}
+
+export interface PullRequestEndToEnd {
+  readonly state: "passed" | "failed" | "running" | "not-run" | "not-needed";
+  readonly url: string | null;
+  readonly detail: string | null;
+}
+
+/**
+ * Whether end-to-end tests passed on a pull request's head. A verdict status such as Vallor's
+ * `E2E requirement` decides once its runs settle; without one, the runs themselves do.
+ */
+export function resolveEndToEnd(
+  checks: ReadonlyArray<PullRequestCheck>,
+): PullRequestEndToEnd | null {
+  const e2e = checks.filter((check) => isEndToEndCheck(check) && !E2E_GATE.test(check.name));
+  const verdict = e2e.find((check) => E2E_VERDICT.test(check.name));
+  const runs = e2e.filter(
+    (check) => check !== verdict && check.status !== "skipped" && check.status !== "neutral",
+  );
+  const running = runs.find((check) => PENDING.has(check.status));
+  if (running) return { state: "running", url: running.url, detail: running.name };
+  const failed = runs.find((check) => FAILED.has(check.status));
+  if (failed) return { state: "failed", url: failed.url, detail: `${failed.name} failed` };
+  if (verdict) {
+    const { url, description: detail } = verdict;
+    if (PENDING.has(verdict.status)) return { state: "running", url, detail };
+    if (verdict.status !== "success") return { state: "not-run", url, detail };
+    return { state: E2E_NOT_NEEDED.test(detail ?? "") ? "not-needed" : "passed", url, detail };
+  }
+  const [first] = runs;
+  return first === undefined
+    ? null
+    : { state: "passed", url: first.url, detail: `${runs.length} E2E checks passed` };
+}
+
+export const END_TO_END_PRESENTATION = {
+  passed: { tone: "success", label: "E2E passed" },
+  failed: { tone: "destructive", label: "E2E failed" },
+  running: { tone: "muted", label: "E2E running" },
+  "not-run": { tone: "attention", label: "E2E not run" },
+  "not-needed": { tone: "muted", label: "no E2E needed" },
+} as const satisfies Record<
+  PullRequestEndToEnd["state"],
+  { tone: "success" | "destructive" | "muted" | "attention"; label: string }
+>;
+
+/** The E2E of each stack's top, read from loaded details; null until its detail loads. */
+export function resolveTopEndToEnd(
+  chains: ReadonlyArray<ThreadPullRequestChain>,
+  details: ReadonlyArray<Pick<PullRequestDetail, "number" | "checks"> | null>,
+): ReadonlyArray<{ readonly number: number; readonly e2e: PullRequestEndToEnd | null }> {
+  return resolveStackTops(chains)
+    .filter((top) => top.stacked)
+    .map(({ link }) => {
+      const detail = details.find((candidate) => candidate?.number === link.number);
+      return { number: link.number, e2e: detail ? resolveEndToEnd(detail.checks) : null };
+    });
+}
+
+/**
+ * Each stack's open tops: open layers with no open layer stacked on them. A top carries every
+ * change below it, so its E2E run is the one that covers the stack. `stacked` is false for a lone
+ * pull request.
+ */
+export function resolveStackTops(chains: ReadonlyArray<ThreadPullRequestChain>): ReadonlyArray<{
+  readonly link: ThreadPullRequestLink;
+  readonly stacked: boolean;
+}> {
+  return chains.flatMap((chain) => {
+    const open = chain.layers.flatMap((layer, at) =>
+      layer.snapshot?.state === "open" ? [{ layer, depth: chain.depths[at] ?? 0 }] : [],
+    );
+    // Layers run depth-first, so a layer with a child is followed by a deeper one.
+    return open
+      .filter((entry, at) => (open[at + 1]?.depth ?? -1) <= entry.depth)
+      .map((entry) => ({ link: entry.layer, stacked: open.length > 1 }));
+  });
 }
 
 /** Whether CI passed, by the same rules as `summarizeChecks`, for the readiness of a stack. */

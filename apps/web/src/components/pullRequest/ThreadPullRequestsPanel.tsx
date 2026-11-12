@@ -40,7 +40,11 @@ import {
   LinkedPullRequestFailingChecks,
   LinkedPullRequestStatusLine,
 } from "./LinkedPullRequestStatus";
-import { resolveMergeReadiness } from "./pullRequestDeploy.logic";
+import {
+  resolveMergeReadiness,
+  resolveStackTops,
+  resolveTopEndToEnd,
+} from "./pullRequestDeploy.logic";
 import { StackReadinessBanner } from "./StackReadinessBanner";
 import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 import { threadEnvironment } from "~/state/threads";
@@ -77,6 +81,7 @@ function LinkRowImpl({
   onUnlink,
   onSetWatching,
   canStartWatch,
+  stackTop,
 }: {
   line: PullRequestListLine;
   threadRef: ScopedThreadRef;
@@ -85,6 +90,8 @@ function LinkRowImpl({
   onUnlink: (link: ThreadPullRequestLink) => void;
   onSetWatching: ((link: ThreadPullRequestLink, watching: boolean) => void) | null;
   canStartWatch: boolean;
+  /** A stack's top, or a lone pull request, whose E2E is the one that matters. */
+  stackTop: "stacked" | "lone" | null;
 }) {
   const openPrLink = useOpenPrLink(threadRef);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -226,6 +233,7 @@ function LinkRowImpl({
                 additions={snapshot?.additions ?? 0}
                 deletions={snapshot?.deletions ?? 0}
                 className="font-mono"
+                inline={open}
               />
             )
           }
@@ -254,6 +262,7 @@ function LinkRowImpl({
                   url={link.url}
                   detail={detail}
                   snapshot={snapshot}
+                  stackTop={stackTop === null ? null : { stacked: stackTop === "stacked" }}
                 />
               ) : (
                 <span className="truncate font-mono">
@@ -347,8 +356,8 @@ function latestSyncedAt(links: ReadonlyArray<ThreadPullRequestLink>): string | n
   return latest;
 }
 
-const lineKey = (line: PullRequestListLine) =>
-  `${line.link.host}/${line.link.repository}#${line.link.number}`;
+const linkKey = (link: ThreadPullRequestLink) => `${link.host}/${link.repository}#${link.number}`;
+const lineKey = (line: PullRequestListLine) => linkKey(line.link);
 
 export function ThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThreadRef }) {
   const configs = useServerConfigs();
@@ -373,7 +382,12 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
     );
   // Derive lines before later hooks to preserve compiler caching and avoid LegendList renders.
   const links = visibleThreadPullRequests(thread?.pullRequests ?? []);
-  const lines = pullRequestListLines(resolveThreadPullRequestChains(links));
+  const chains = resolveThreadPullRequestChains(links);
+  const lines = pullRequestListLines(chains);
+  const stackTops = resolveStackTops(chains);
+  const stackTopByKey = new Map(
+    stackTops.map((top) => [linkKey(top.link), top.stacked ? "stacked" : "lone"] as const),
+  );
   const openCount = links.filter(
     (link) => link.snapshot === null || link.snapshot.state === "open",
   ).length;
@@ -422,7 +436,15 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
   const graphite = readinessSignals.details.some((detail) => detail?.graphiteUrl !== undefined);
 
   // Legend rows update only for data/extraData changes; include all external inputs.
-  const rowInputs = { speedMode, environmentProjects, capabilities, supportsWatch, thread };
+  const rowInputs = {
+    speedMode,
+    environmentProjects,
+    capabilities,
+    supportsWatch,
+    thread,
+    stackTopByKey,
+  };
+  const topEndToEnd = resolveTopEndToEnd(chains, readinessSignals.details);
 
   if (linkCount === 0) {
     return (
@@ -445,7 +467,12 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
     <PullRequestSpeedModeContext value={speedMode}>
       <div className="flex h-full min-h-0 flex-col">
         {readiness === null ? null : (
-          <StackReadinessBanner threadRef={threadRef} readiness={readiness} graphite={graphite} />
+          <StackReadinessBanner
+            threadRef={threadRef}
+            readiness={readiness}
+            graphite={graphite}
+            tops={topEndToEnd}
+          />
         )}
         {/* Threads that run a stack or a sweep link hundreds of pull requests; only the rows in
           view are mounted. */}
@@ -468,6 +495,7 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
               onUnlink={handleUnlink}
               onSetWatching={supportsWatch ? handleSetWatching : null}
               canStartWatch={canStartWatch}
+              stackTop={stackTopByKey.get(lineKey(line)) ?? null}
             />
           )}
           estimatedItemSize={52}

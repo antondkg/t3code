@@ -26,7 +26,7 @@
     {
       "pullRequest": null,
       "head": null,
-      "summary": "Preview deploy status, Graphite links and stack approval on linked pull requests; gt submit links every stack layer.",
+      "summary": "Preview deploy status, Graphite links and stack approval on linked pull requests, with E2E read from each stack's top and lines split into code and tests; gt submit links every stack layer.",
       "retireWhen": "Upstream shows deployments and Graphite stacks on linked pull requests."
     },
     {

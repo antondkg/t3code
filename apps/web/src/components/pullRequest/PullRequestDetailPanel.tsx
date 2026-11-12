@@ -1615,7 +1615,7 @@ export function PullRequestDetailPanel({
                       additions={detail.additions}
                       deletions={detail.deletions}
                       className="shrink-0 font-mono text-2xs"
-                      eager
+                      inline
                     />
                   </span>
                 </div>
@@ -1702,7 +1702,7 @@ export function PullRequestDetailPanel({
                     additions={detail.additions}
                     deletions={detail.deletions}
                     className="shrink-0 font-mono text-xs"
-                    eager
+                    inline
                   />
                 }
               />
