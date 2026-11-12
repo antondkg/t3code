@@ -28,9 +28,12 @@ import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { PullRequestActorAvatar } from "./pullRequestPresentation";
 import {
+  END_TO_END_PRESENTATION,
+  resolveEndToEnd,
   resolvePullRequestDeployStatus,
   signoffLabel,
   summarizeChecks,
+  type PullRequestEndToEnd,
 } from "./pullRequestDeploy.logic";
 
 type Tone = "success" | "destructive" | "muted" | "attention";
@@ -237,6 +240,53 @@ function ChecksStatus({
   }
 }
 
+export const E2E_ICON = {
+  passed: CircleCheckIcon,
+  failed: CircleXIcon,
+  running: CircleDashedIcon,
+  "not-run": CircleDashedIcon,
+  "not-needed": CircleCheckIcon,
+} as const satisfies Record<PullRequestEndToEnd["state"], LucideIcon>;
+
+/** E2E on a stack's top, which carries every change below it. */
+function EndToEndStatus({
+  checks,
+  stacked,
+  rowLink,
+}: {
+  checks: ReadonlyArray<PullRequestCheck>;
+  stacked: boolean;
+  rowLink: ReturnType<typeof useRowLink>;
+}) {
+  const e2e = resolveEndToEnd(checks);
+  if (e2e === null) return null;
+  const { tone, label } = END_TO_END_PRESENTATION[e2e.state];
+  const icon = E2E_ICON[e2e.state];
+  const tooltip = [stacked ? "Top of the stack: this run covers every layer." : null, e2e.detail]
+    .filter(Boolean)
+    .join(" ");
+  const body = (
+    <Status tone={tone} icon={icon}>
+      {label}
+    </Status>
+  );
+  return (
+    <>
+      <Dot />
+      {e2e.url ? (
+        <RowLink onClick={rowLink(e2e.url, false)} tooltip={tooltip}>
+          {body}
+        </RowLink>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger render={body} />
+          <TooltipPopup side="top">{tooltip}</TooltipPopup>
+        </Tooltip>
+      )}
+    </>
+  );
+}
+
 /** Failed checks the host does not require, such as an advisory E2E notice. */
 function OptionalFailingStatus({ checks }: { checks: ReadonlyArray<PullRequestCheck> }) {
   if (checks.length === 0) return null;
@@ -337,11 +387,14 @@ export function LinkedPullRequestStatusLine({
   url,
   detail,
   snapshot,
+  stackTop = null,
 }: {
   threadRef: ScopedThreadRef;
   url: string;
   detail: PullRequestDetail | null;
   snapshot: ThreadPullRequestSnapshot | null;
+  /** Set on a stack's top, or a lone pull request, whose E2E is the one that matters. */
+  stackTop?: { readonly stacked: boolean } | null;
 }) {
   const rowLink = useRowLink(threadRef);
   const links = (
@@ -398,6 +451,9 @@ export function LinkedPullRequestStatusLine({
   return (
     <>
       <ChecksStatus detail={detail} snapshot={snapshot} />
+      {stackTop !== null && detail !== null ? (
+        <EndToEndStatus checks={detail.checks} stacked={stackTop.stacked} rowLink={rowLink} />
+      ) : null}
       <OptionalFailingStatus checks={summary?.optionalFailing ?? []} />
       {snapshot !== null ? (
         <>

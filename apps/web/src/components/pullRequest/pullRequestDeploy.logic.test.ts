@@ -11,8 +11,10 @@ import {
   resolvePullRequestDeployStatus,
   signoffLabel,
   summarizeChecks,
+  resolveEndToEnd,
   resolveStackApproval,
   resolveStackBaseLayer,
+  resolveStackTops,
 } from "./pullRequestDeploy.logic";
 
 const check = (name: string, status: PullRequestCheck["status"], url: string | null = null) => ({
@@ -176,6 +178,84 @@ describe("resolveStackApproval", () => {
   });
 });
 
+describe("resolveEndToEnd", () => {
+  const verdict = (status: PullRequestCheck["status"], description: string) => ({
+    ...check("E2E requirement", status, "https://ci/verdict"),
+    description,
+  });
+  it.each([
+    { name: "no E2E checks", checks: [check("lint", "success")], expected: null },
+    {
+      name: "a module run still going, before the verdict updates",
+      checks: [
+        check("Grids / E2E", "pending", "https://ci/grids"),
+        verdict("failure", "Optional: no E2E run for the current commit"),
+      ],
+      expected: { state: "running", url: "https://ci/grids", detail: "Grids / E2E" },
+    },
+    {
+      name: "a failed module run",
+      checks: [check("Chat / E2E", "failure", "https://ci/chat"), check("Smoke / E2E", "success")],
+      expected: { state: "failed", url: "https://ci/chat", detail: "Chat / E2E failed" },
+    },
+    {
+      name: "the verdict saying the head was not run",
+      checks: [verdict("failure", "Optional: no E2E run for the current commit")],
+      expected: {
+        state: "not-run",
+        url: "https://ci/verdict",
+        detail: "Optional: no E2E run for the current commit",
+      },
+    },
+    {
+      name: "the verdict passing the head, ignoring the merge-queue gate",
+      checks: [
+        verdict("success", "Required E2E passed for the current commit"),
+        check("E2E merge gate", "skipped"),
+      ],
+      expected: {
+        state: "passed",
+        url: "https://ci/verdict",
+        detail: "Required E2E passed for the current commit",
+      },
+    },
+    {
+      name: "the verdict finding no E2E needed",
+      checks: [verdict("success", "No additional E2E suite required")],
+      expected: {
+        state: "not-needed",
+        url: "https://ci/verdict",
+        detail: "No additional E2E suite required",
+      },
+    },
+  ])("reads $name", ({ checks, expected }) => {
+    expect(resolveEndToEnd(checks)).toEqual(expected);
+  });
+
+  it("picks each stack's open tops, branches included", () => {
+    const layer = (number: number, state = "open") =>
+      ({
+        host: "github.com",
+        repository: "boardai/vallor",
+        number,
+        snapshot: { state },
+      }) as unknown as ThreadPullRequestLink;
+    const tops = resolveStackTops([
+      {
+        kind: "derived",
+        layers: [layer(1), layer(2), layer(3), layer(4), layer(5, "merged")],
+        depths: [0, 1, 2, 1, 2],
+      },
+      { kind: "derived", layers: [layer(9)], depths: [0] },
+    ]);
+    expect(tops.map(({ link, stacked }) => [link.number, stacked])).toEqual([
+      [3, true],
+      [4, true],
+      [9, false],
+    ]);
+  });
+});
+
 describe("resolveMergeReadiness", () => {
   const link = (
     number: number,
@@ -304,7 +384,8 @@ describe("summarizeChecks", () => {
         passed: 1,
         total: 1,
         signoffs: [],
-        optionalFailing: [{ ...check("E2E requirement", "failure"), required: false }],
+        // E2E reads apart, on the stack's top.
+        optionalFailing: [],
       },
     },
     {

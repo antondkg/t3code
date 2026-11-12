@@ -1,6 +1,7 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import {
   CircleCheckIcon,
+  CircleDashedIcon,
   CircleXIcon,
   ClipboardCheckIcon,
   LayersIcon,
@@ -28,7 +29,12 @@ import {
 import { Button } from "../ui/button";
 import { PullRequestGlyph } from "./pullRequestIcons";
 import { toastManager } from "../ui/toast";
-import type { PullRequestMergeReadiness } from "./pullRequestDeploy.logic";
+import { E2E_ICON } from "./LinkedPullRequestStatus";
+import {
+  END_TO_END_PRESENTATION,
+  type PullRequestEndToEnd,
+  type PullRequestMergeReadiness,
+} from "./pullRequestDeploy.logic";
 import { writeHandoffToComposer } from "./usePullRequestActions";
 
 // `--confirm` makes Graphite list what it merges and ask again in the terminal.
@@ -44,11 +50,14 @@ export function StackReadinessBanner({
   threadRef,
   readiness,
   graphite,
+  tops,
 }: {
   threadRef: ScopedThreadRef;
   readiness: PullRequestMergeReadiness;
   /** The repository uses Graphite, so `gt merge` can land the stack. */
   graphite: boolean;
+  /** Each stack's top and its E2E, which covers every layer below it. */
+  tops: ReadonlyArray<{ readonly number: number; readonly e2e: PullRequestEndToEnd | null }>;
 }) {
   const {
     open,
@@ -109,6 +118,7 @@ export function StackReadinessBanner({
             {open === 1 ? "approved, CI passing" : `all ${open} approved, CI passing`}
           </span>
         </span>
+        <TopEndToEndLines tops={tops} />
         <span className="flex flex-wrap gap-1.5">
           {graphite ? (
             <Button size="xs" onClick={() => setConfirming(true)}>
@@ -152,6 +162,7 @@ export function StackReadinessBanner({
         <span className="shrink-0 font-semibold">{kind}</span>
         <span className="truncate text-muted-foreground">not ready to merge</span>
       </span>
+      <TopEndToEndLines tops={tops} />
       {changesRequested.length > 0 ? (
         <Line tone="destructive" icon={UserRoundXIcon}>
           Changes requested: {list(changesRequested)}
@@ -192,22 +203,47 @@ export function StackReadinessBanner({
   );
 }
 
+/** The E2E that matters for a stack: its top's, which carries every change below it. */
+function TopEndToEndLines({
+  tops,
+}: {
+  tops: ReadonlyArray<{ readonly number: number; readonly e2e: PullRequestEndToEnd | null }>;
+}) {
+  return tops.map(({ number, e2e }) => {
+    const shown = e2e === null ? null : END_TO_END_PRESENTATION[e2e.state];
+    return (
+      <Line
+        key={number}
+        tone={shown?.tone ?? "muted"}
+        icon={e2e === null ? CircleDashedIcon : E2E_ICON[e2e.state]}
+      >
+        <span className="font-medium">Top of stack #{number}:</span>{" "}
+        {shown?.label ?? "no E2E reported"}
+      </Line>
+    );
+  });
+}
+
+type LineTone = "destructive" | "muted" | "success" | "attention";
+
+const LINE_TONE: Record<LineTone, string> = {
+  destructive: "text-destructive",
+  muted: "text-muted-foreground",
+  success: "text-success-foreground",
+  attention: "text-warning-foreground",
+};
+
 function Line({
   tone,
   icon: Icon,
   children,
 }: {
-  tone: "destructive" | "muted";
+  tone: LineTone;
   icon: typeof LayersIcon;
   children: React.ReactNode;
 }) {
   return (
-    <span
-      className={cn(
-        "flex min-w-0 items-center gap-1.5 truncate",
-        tone === "destructive" ? "text-destructive" : "text-muted-foreground",
-      )}
-    >
+    <span className={cn("flex min-w-0 items-center gap-1.5 truncate", LINE_TONE[tone])}>
       <Icon aria-hidden className="size-3.5 shrink-0" />
       <span className="truncate">{children}</span>
     </span>

@@ -30,6 +30,7 @@ export function PullRequestChangeBreakdownStat({
   deletions,
   className,
   eager = false,
+  inline = false,
 }: {
   environmentId: EnvironmentId;
   reference: PullRequestRef;
@@ -37,8 +38,10 @@ export function PullRequestChangeBreakdownStat({
   deletions: number;
   className: string;
   eager?: boolean;
+  /** Also show code against tests beside the stat; reads the split on mount. */
+  inline?: boolean;
 }) {
-  const [requested, setRequested] = useState(eager);
+  const [requested, setRequested] = useState(eager || inline);
   const query = useEnvironmentQuery(
     requested ? pullRequestEnvironment.changeBreakdown({ environmentId, input: reference }) : null,
   );
@@ -50,12 +53,13 @@ export function PullRequestChangeBreakdownStat({
         onPointerEnter={() => setRequested(true)}
         onFocus={() => setRequested(true)}
         render={
-          <span className="inline-flex">
+          <span className="inline-flex items-center gap-1.5">
             <PullRequestDiffStat
               additions={additions}
               deletions={deletions}
               className={className}
             />
+            {inline && breakdown ? <CodeAgainstTests breakdown={breakdown} /> : null}
           </span>
         }
       />
@@ -67,6 +71,28 @@ export function PullRequestChangeBreakdownStat({
         <TooltipPopup side="bottom">Loading breakdown</TooltipPopup>
       ) : null}
     </Tooltip>
+  );
+}
+
+/** Code against tests at a glance; mocks count as tests, the full split stays in the hover. */
+function CodeAgainstTests({ breakdown }: { breakdown: NonNullable<PullRequestChangeBreakdown> }) {
+  const tests = {
+    additions: breakdown.tests.additions + breakdown.mocks.additions,
+    deletions: breakdown.tests.deletions + breakdown.mocks.deletions,
+  };
+  const part = (label: string, { additions, deletions }: DiffTotals) => (
+    <span className="inline-flex items-center gap-0.5">
+      <span className="font-sans text-muted-foreground">{label}</span>
+      <span className="text-diff-addition-foreground">+{formatDiffCount(additions)}</span>
+      <span className="text-diff-deletion">-{formatDiffCount(deletions)}</span>
+    </span>
+  );
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 font-mono text-2xs tabular-nums">
+      {part("code", breakdown.code)}
+      <span className="text-muted-foreground/50">·</span>
+      {part("tests", tests)}
+    </span>
   );
 }
 
