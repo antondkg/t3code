@@ -210,6 +210,7 @@ export type SidebarListMarker =
   | "settled-placeholder"
   | "pinned-divider"
   | "working-header"
+  | "waiting-divider"
   | "snoozed-header"
   | "settled-header";
 
@@ -1008,6 +1009,14 @@ export function resolveWindowTitleThreadStatus(thread: SidebarThreadStatusInput)
     default:
       return null;
   }
+}
+
+/** The Working shelf lists threads an agent is running first, then ones blocked or idle. */
+export function splitWorkingShelf<T extends SidebarThreadStatusInput>(
+  threads: ReadonlyArray<T>,
+): { readonly busy: ReadonlyArray<T>; readonly waiting: ReadonlyArray<T> } {
+  const waiting = threads.filter((thread) => resolveSidebarThreadStatus(thread) === "waiting");
+  return { busy: threads.filter((thread) => !waiting.includes(thread)), waiting };
 }
 
 /**

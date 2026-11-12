@@ -203,6 +203,7 @@ import {
   sortPinnedThreadsForSidebar,
   sortThreadsForSidebar,
   sortWorkingThreadsBySend,
+  splitWorkingShelf,
   useSnoozeWakeClock,
   threadShortcutContext,
   useThreadJumpHintsVisible,
@@ -277,6 +278,7 @@ import {
 import {
   SidebarDragBoundary,
   SidebarSectionHeader,
+  SidebarWaitingDivider,
   SidebarSectionPlaceholder,
 } from "./sidebar/SidebarListMarkers";
 
@@ -707,7 +709,10 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
             preferredIds: optimisticDrop.order,
             getId: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
           }),
-    workingThreads: sortWorkingThreadsBySend(working),
+    workingThreads: (() => {
+      const { busy, waiting } = splitWorkingShelf(sortWorkingThreadsBySend(working));
+      return [...busy, ...waiting];
+    })(),
     snoozedThreads: snoozed.toSorted(
       (left, right) =>
         firstValidTimestampMs(left.snoozedUntil ?? null) -
@@ -1385,6 +1390,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     keepEmptyFolders: (group) =>
       scopedProjectGroups.length > 0 || (group.pinned && !group.archived),
   });
+  const workingWaitingCount = splitWorkingShelf(workingThreads).waiting.length;
 
   // Ranked across environments as the palette ranks them, so one
   // environment's list does not sit above another's better matches; rows
@@ -1996,7 +2002,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     items.push(...activeRows);
     if (workingThreads.length > 0) {
       items.push({ kind: "marker", marker: "working-header" });
-      items.push(...rowsOf(visibleWorkingThreads, "working"));
+      const { busy, waiting } = splitWorkingShelf(visibleWorkingThreads);
+      items.push(...rowsOf(busy, "working"));
+      if (workingWaitingCount > 0) items.push({ kind: "marker", marker: "waiting-divider" });
+      items.push(...rowsOf(waiting, "working"));
     }
     if (snoozedThreads.length > 0) {
       items.push({ kind: "marker", marker: "snoozed-header" });
@@ -3642,11 +3651,19 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 marker="working-header"
                                 className="mt-auto"
                                 label="Working"
-                                count={workingThreads.length}
+                                count={workingThreads.length - workingWaitingCount}
                                 toggle={{
                                   expanded: workingShelfExpanded,
                                   onToggle: toggleWorkingShelf,
                                 }}
+                              />,
+                            );
+                            break;
+                          case "waiting-divider":
+                            items.push(
+                              <SidebarWaitingDivider
+                                key="waiting-divider"
+                                count={workingWaitingCount}
                               />,
                             );
                             break;
