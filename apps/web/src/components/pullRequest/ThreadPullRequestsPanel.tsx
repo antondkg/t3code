@@ -96,7 +96,7 @@ function LinkRowImpl({
   const menuAnchor = menuPosition
     ? { getBoundingClientRect: () => new DOMRect(menuPosition.x, menuPosition.y, 0, 0) }
     : undefined;
-  const { link, depth, stack, stacked } = line;
+  const { link, depth, stack } = line;
   const snapshot = link.snapshot;
   const open = snapshot === null || snapshot.state === "open";
   const watching = link.watch !== undefined;
@@ -142,9 +142,9 @@ function LinkRowImpl({
         setMenuPosition({ x: event.clientX, y: event.clientY });
         setMenuOpen(true);
       }}
-      style={{ paddingLeft: `${0.5 + Math.min(depth + (stacked ? 1 : 0), 4) * 1.25}rem` }}
+      style={{ paddingLeft: `${0.5 + depth * 0.5}rem` }}
     >
-      {stacked ? <span aria-hidden className="-ml-2 h-6 w-px shrink-0 bg-border/70" /> : null}
+      {depth > 0 ? <span aria-hidden className="-ml-2 h-6 w-px shrink-0 bg-border/70" /> : null}
       {snapshot === null ? (
         <PullRequestGlyph.pullRequest
           aria-label="Waiting for host state"
