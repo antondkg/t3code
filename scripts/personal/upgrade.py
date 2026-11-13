@@ -28,6 +28,7 @@ SCHEDULE_LABEL = "com.antondkg.t3-personal-upgrade"
 SCHEDULE_PLIST = Path.home() / f"Library/LaunchAgents/{SCHEDULE_LABEL}.plist"
 SCHEDULE_LOG = Path.home() / "Library/Logs/t3-personal-upgrade.log"
 BUMP_SUBJECT = "build: personal "
+HEAVY_LOCK = "/usr/bin/lockf"
 # T3's own agent sessions export this; a test fixture asserts it is absent.
 CHECK_ENV = {k: v for k, v in os.environ.items() if k != "T3_ACP_MCP_AUTHORIZATION"}
 
@@ -361,7 +362,8 @@ def upgrade(args):
     manifest = update_source(tag, args.remote, args.unattended)
     version = manifest["version"]
     if not args.skip_checks:
-        run(vp(), "run", "check:changed", tag, env=CHECK_ENV)
+        # Browser tests time out when other heavy builds share the Mac, so queue behind them.
+        run(HEAVY_LOCK, "-k", "/tmp/valos-heavy-build.lock", vp(), "run", "check:changed", tag, env=CHECK_ENV)
     run(sys.executable, "scripts/personal/build.py", "desktop")
     if args.remote:
         branch = out("git", "branch", "--show-current")
