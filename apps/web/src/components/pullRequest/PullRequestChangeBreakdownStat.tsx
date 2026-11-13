@@ -2,6 +2,7 @@ import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 import type { EnvironmentId, PullRequestChangeBreakdown, PullRequestRef } from "@t3tools/contracts";
 import { useState } from "react";
 
+import { cn } from "~/lib/utils";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
 
@@ -38,7 +39,7 @@ export function PullRequestChangeBreakdownStat({
   deletions: number;
   className: string;
   eager?: boolean;
-  /** Also show code against tests beside the stat; reads the split on mount. */
+  /** Also show the share of lines in tests beside the stat; reads the split on mount. */
   inline?: boolean;
 }) {
   const [requested, setRequested] = useState(eager || inline);
@@ -59,7 +60,7 @@ export function PullRequestChangeBreakdownStat({
               deletions={deletions}
               className={className}
             />
-            {inline && breakdown ? <CodeAgainstTests breakdown={breakdown} /> : null}
+            {inline && breakdown ? <TestShare breakdown={breakdown} className={className} /> : null}
           </span>
         }
       />
@@ -74,26 +75,20 @@ export function PullRequestChangeBreakdownStat({
   );
 }
 
-/** Code against tests at a glance; mocks count as tests, the full split stays in the hover. */
-function CodeAgainstTests({ breakdown }: { breakdown: NonNullable<PullRequestChangeBreakdown> }) {
-  const tests = {
-    additions: breakdown.tests.additions + breakdown.mocks.additions,
-    deletions: breakdown.tests.deletions + breakdown.mocks.deletions,
-  };
-  const part = (label: string, { additions, deletions }: DiffTotals) => (
-    <span className="inline-flex items-center gap-0.5">
-      <span className="font-sans text-muted-foreground">{label}</span>
-      <span className="text-diff-addition-foreground">+{formatDiffCount(additions)}</span>
-      <span className="text-diff-deletion">-{formatDiffCount(deletions)}</span>
-    </span>
-  );
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 font-mono text-2xs tabular-nums">
-      {part("code", breakdown.code)}
-      <span className="text-muted-foreground/50">·</span>
-      {part("tests", tests)}
-    </span>
-  );
+/** The share of changed lines in tests (mocks count as tests); the full split stays in the hover. */
+function TestShare({
+  breakdown,
+  className,
+}: {
+  breakdown: NonNullable<PullRequestChangeBreakdown>;
+  className: string;
+}) {
+  const lines = ({ additions, deletions }: DiffTotals) => additions + deletions;
+  const tests = lines(breakdown.tests) + lines(breakdown.mocks);
+  const total = tests + lines(breakdown.code);
+  if (total === 0) return null;
+  const label = tests === 0 ? "no tests" : `${Math.round((tests / total) * 100)}% tests`;
+  return <span className={cn(className, "text-muted-foreground tabular-nums")}>{label}</span>;
 }
 
 /**

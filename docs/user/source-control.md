@@ -375,8 +375,8 @@ watch a demo and add a label, is left out of CI and shows as **demo to watch** (
 next to the review, linked to its run. When the repository's branch rules require specific checks,
 only those decide whether CI passed, here and in the pull request view; other failed checks show
 muted as optional. In a stack, the top layer carries every change, so its E2E result shows on its
-row and in the verdict as **Top of stack**; lower layers leave E2E out. Each open row also splits its
-lines into code and tests. When every open layer passes and is approved, **Merge stack with Graphite** runs
+row and in the verdict as **Top of stack**; lower layers leave E2E out. Each open row also shows what
+share of its changed lines are tests. When every open layer passes and is approved, **Merge stack with Graphite** runs
 `gt merge --confirm` in a terminal in the thread's checkout, and **Ask agent to merge** puts a merge
 request in the composer.
 
