@@ -1,5 +1,5 @@
 diff --git a/dist/cjs/index.js b/dist/cjs/index.js
-index a91ca8f..4d40172 100644
+index a91ca8f..31e6120 100644
 --- a/dist/cjs/index.js
 +++ b/dist/cjs/index.js
 @@ -1849,14 +1849,44 @@ var NativeMessagingHost = class {
@@ -79,8 +79,61 @@ index a91ca8f..4d40172 100644
        d7("send: pending");
        return;
      }
+@@ -1954,6 +1985,14 @@ var RuntimeAPI = class extends import_node_events3.EventEmitter {
+     super();
+     this.ctx = ctx;
+     this.hostMap = {};
++    // A port's host outlives its extension context unless closed: MV3 workers stop without
++    // disconnecting, so close a port's host when its worker stops or its page goes away.
++    ctx.session.serviceWorkers.on("running-status-changed", ({ versionId, runningStatus }) => {
++      if (runningStatus !== "stopped") return;
++      for (const [connectionId, host] of Object.entries(this.hostMap)) {
++        if (host?.versionId === versionId) this.disconnectNative(undefined, connectionId);
++      }
++    });
+     this.connectNative = async (event, connectionId, application) => {
+       const host = new NativeMessagingHost(
+         event.extension.id,
+@@ -1961,11 +2000,20 @@ var RuntimeAPI = class extends import_node_events3.EventEmitter {
+         connectionId,
+         application
+       );
++      host.versionId = event.sender?.versionId;
++      if (event.type === "frame") {
++        event.sender.once("destroyed", () => this.disconnectNative(event, connectionId));
++      }
+       this.hostMap[connectionId] = host;
+     };
+     this.disconnectNative = (event, connectionId) => {
+-      this.hostMap[connectionId]?.destroy();
+-      this.hostMap[connectionId] = void 0;
++      const host = this.hostMap[connectionId];
++      delete this.hostMap[connectionId];
++      try {
++        host?.destroy();
++      } catch (error) {
++        d7("disconnectNative: %s", error);
++      }
+     };
+     this.sendNativeMessage = async (event, application, message) => {
+       const connectionId = (0, import_node_crypto.randomUUID)();
+@@ -1976,8 +2024,12 @@ var RuntimeAPI = class extends import_node_events3.EventEmitter {
+         application,
+         false
+       );
+-      await host.ready;
+-      return await host.sendAndReceive(message);
++      try {
++        await host.ready;
++        return await host.sendAndReceive(message);
++      } finally {
++        host.destroy();
++      }
+     };
+     this.openOptionsPage = async ({ extension }) => {
+       const manifest = getExtensionManifest(extension);
 diff --git a/dist/esm/index.mjs b/dist/esm/index.mjs
-index 4392922..8143605 100644
+index 4392922..3a9173f 100644
 --- a/dist/esm/index.mjs
 +++ b/dist/esm/index.mjs
 @@ -1812,14 +1812,44 @@ var NativeMessagingHost = class {
@@ -160,3 +213,56 @@ index 4392922..8143605 100644
        d7("send: pending");
        return;
      }
+@@ -1917,6 +1948,14 @@ var RuntimeAPI = class extends EventEmitter3 {
+     super();
+     this.ctx = ctx;
+     this.hostMap = {};
++    // A port's host outlives its extension context unless closed: MV3 workers stop without
++    // disconnecting, so close a port's host when its worker stops or its page goes away.
++    ctx.session.serviceWorkers.on("running-status-changed", ({ versionId, runningStatus }) => {
++      if (runningStatus !== "stopped") return;
++      for (const [connectionId, host] of Object.entries(this.hostMap)) {
++        if (host?.versionId === versionId) this.disconnectNative(undefined, connectionId);
++      }
++    });
+     this.connectNative = async (event, connectionId, application) => {
+       const host = new NativeMessagingHost(
+         event.extension.id,
+@@ -1924,11 +1963,20 @@ var RuntimeAPI = class extends EventEmitter3 {
+         connectionId,
+         application
+       );
++      host.versionId = event.sender?.versionId;
++      if (event.type === "frame") {
++        event.sender.once("destroyed", () => this.disconnectNative(event, connectionId));
++      }
+       this.hostMap[connectionId] = host;
+     };
+     this.disconnectNative = (event, connectionId) => {
+-      this.hostMap[connectionId]?.destroy();
+-      this.hostMap[connectionId] = void 0;
++      const host = this.hostMap[connectionId];
++      delete this.hostMap[connectionId];
++      try {
++        host?.destroy();
++      } catch (error) {
++        d7("disconnectNative: %s", error);
++      }
+     };
+     this.sendNativeMessage = async (event, application, message) => {
+       const connectionId = randomUUID();
+@@ -1939,8 +1987,12 @@ var RuntimeAPI = class extends EventEmitter3 {
+         application,
+         false
+       );
+-      await host.ready;
+-      return await host.sendAndReceive(message);
++      try {
++        await host.ready;
++        return await host.sendAndReceive(message);
++      } finally {
++        host.destroy();
++      }
+     };
+     this.openOptionsPage = async ({ extension }) => {
+       const manifest = getExtensionManifest(extension);
