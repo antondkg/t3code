@@ -14,7 +14,7 @@
     {
       "pullRequest": null,
       "head": null,
-      "summary": "Chrome extensions (1Password by default) in the desktop preview browser.",
+      "summary": "Chrome extensions (1Password by default) in the desktop preview browser, closing each native messaging helper once its extension context goes away.",
       "retireWhen": "Upstream ships extension support in the preview browser, or electron-chrome-extensions patches the browser namespace itself."
     },
     {
