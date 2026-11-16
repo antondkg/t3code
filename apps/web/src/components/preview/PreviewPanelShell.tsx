@@ -14,6 +14,7 @@ import {
 import { RESIZABLE_WIDTH_PROPERTY } from "~/hooks/useResizableWidth";
 import { canReturnFocusTo, workspaceAreaProps } from "../../lib/workspaceFocus";
 import { cn } from "~/lib/utils";
+import type { RightPanelDock } from "../../rightPanelDock";
 
 import { RightPanelResizeHandle } from "./RightPanelResizeHandle";
 
@@ -30,6 +31,8 @@ interface PreviewPanelShellProps {
   /** Use a distinct key per surface to keep remembered widths independent. */
   widthStorageKey?: string;
   defaultWidth?: number;
+  /** Inline only: "bottom" sits below the chat and resizes its height. */
+  dock?: RightPanelDock;
   onMouseDown?: MouseEventHandler<HTMLDivElement>;
   onMouseUp?: MouseEventHandler<HTMLDivElement>;
   children: ReactNode;
@@ -48,6 +51,7 @@ function ResizablePreviewPanelShell(props: PreviewPanelShellProps) {
     enabled: props.mode === "inline" && !props.maximized,
     widthStorageKey: props.widthStorageKey,
     defaultWidth: props.defaultWidth,
+    dock: props.dock,
   });
   return <PreviewPanelShellFrame {...props} inlineSize={inlineSize} />;
 }
@@ -70,6 +74,8 @@ function PreviewPanelShellFrame(
 ) {
   const panelArea = workspaceAreaProps("panel", 4, props.workspaceLabel ?? "Workspace panel");
   const isInline = props.mode === "inline";
+  const bottom = isInline && props.dock === "bottom";
+  const sizeProperty = bottom ? "height" : "width";
   const collapsible = isInline && props.open !== undefined;
   const open = props.open ?? true;
   const maximized = props.maximized ?? false;
@@ -159,23 +165,34 @@ function PreviewPanelShellFrame(
       onMouseDown={props.onMouseDown}
       onMouseUp={props.onMouseUp}
       className={cn(
-        "relative flex h-full min-h-0 min-w-0 max-w-full flex-col self-stretch bg-background",
+        "relative flex min-h-0 min-w-0 max-w-full flex-col self-stretch bg-background",
+        !bottom && "h-full",
         isInline
           ? maximized
             ? // Maximizing meets the sidebar border or window edge; omit the duplicate border.
               "flex-1"
-            : "shrink-0 border-l border-border"
+            : bottom
+              ? "shrink-0 border-t border-border"
+              : "shrink-0 border-l border-border"
           : "w-full",
         collapsible &&
-          "[[data-panel-animations=true]_&]:transition-[width] [[data-panel-animations=true]_&]:duration-(--panel-animation-duration) [[data-panel-animations=true]_&]:ease-out",
-        collapsible && open && "[[data-panel-animations=true]_&]:starting:w-0!",
+          (bottom
+            ? "[[data-panel-animations=true]_&]:transition-[height]"
+            : "[[data-panel-animations=true]_&]:transition-[width]"),
+        collapsible &&
+          "[[data-panel-animations=true]_&]:duration-(--panel-animation-duration) [[data-panel-animations=true]_&]:ease-out",
+        collapsible &&
+          open &&
+          (bottom
+            ? "[[data-panel-animations=true]_&]:starting:h-0!"
+            : "[[data-panel-animations=true]_&]:starting:w-0!"),
         collapsible && !open && "pointer-events-none",
       )}
       style={
         isInline
           ? ({
               [RESIZABLE_WIDTH_PROPERTY]: `${width}px`,
-              width: maximized
+              [sizeProperty]: maximized
                 ? "100%"
                 : collapsible && !open
                   ? "0px"
@@ -187,14 +204,19 @@ function PreviewPanelShellFrame(
       data-preview-panel-mode={props.mode}
       data-preview-panel-maximized={maximized ? "true" : "false"}
     >
-      {isInline && !maximized ? <RightPanelResizeHandle handlers={handlers} /> : null}
+      {isInline && !maximized ? (
+        <RightPanelResizeHandle
+          handlers={handlers}
+          orientation={bottom ? "horizontal" : "vertical"}
+        />
+      ) : null}
       {/* Content stays pinned to the right edge, so closing uncovers the chat
           instead of sliding the tab bar under the title bar controls. */}
       <div
         className={cn(
           "h-full min-h-0 w-full",
           collapsible && "overflow-clip",
-          collapsible && !maximized && "flex justify-end",
+          collapsible && !maximized && !bottom && "flex justify-end",
         )}
       >
         <div
@@ -204,7 +226,7 @@ function PreviewPanelShellFrame(
           )}
           style={
             collapsible && !maximized
-              ? { width: `calc(var(${RESIZABLE_WIDTH_PROPERTY}) - 1px)` }
+              ? { [sizeProperty]: `calc(var(${RESIZABLE_WIDTH_PROPERTY}) - 1px)` }
               : undefined
           }
         >

@@ -15,7 +15,7 @@ export interface UseResizableWidthOptions {
   readonly defaultWidth: number;
   readonly minWidth: number;
   readonly maxWidth: number;
-  readonly edge: "left" | "right";
+  readonly edge: "left" | "right" | "top";
 }
 
 export interface ResizableWidthHandlers {

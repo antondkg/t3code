@@ -29,6 +29,12 @@ The controls retreat as the composer docks after you send the first message.
 Turn on **Composer context** to keep those controls visible after the thread starts. This preference
 applies to the web and desktop clients.
 
+## Panel position
+
+On web and desktop, the side panel can sit below the chat instead of to its right. With the panel
+open, choose **Move panel below chat** next to **Maximize panel**, and drag its top edge to resize
+it. The choice is saved per device.
+
 ## Math
 
 Turn on **Render math** in **Settings → Appearance** to typeset LaTeX in messages and Markdown

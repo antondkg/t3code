@@ -1,4 +1,6 @@
 import {
+  ArrowDownToLineIcon,
+  ArrowRightToLineIcon,
   PanelBottomIcon,
   PanelRightIcon,
   SquareMenuIcon,
@@ -9,6 +11,7 @@ import { memo, type ReactNode, useLayoutEffect, useRef } from "react";
 
 import { cn } from "~/lib/utils";
 
+import type { RightPanelDock } from "../../rightPanelDock";
 import type { ThreadPanelPresentation } from "../../rightPanelLayout";
 import { PopoverCreateHandle, PopoverTrigger } from "../ui/popover";
 import { useMobileSidebarSheetMounted } from "../ui/sidebar";
@@ -173,6 +176,39 @@ export const RightPanelMaximizeControl = memo(function RightPanelMaximizeControl
   );
 });
 
+export const RightPanelDockControl = memo(function RightPanelDockControl({
+  dock,
+  onToggle,
+}: {
+  dock: RightPanelDock;
+  onToggle: () => void;
+}) {
+  const label = dock === "bottom" ? "Move panel to the right" : "Move panel below chat";
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Toggle
+            className="shrink-0 [-webkit-app-region:no-drag]"
+            pressed={dock === "bottom"}
+            onPressedChange={onToggle}
+            aria-label={label}
+            variant="ghost"
+            size="sm"
+          >
+            {dock === "bottom" ? (
+              <ArrowRightToLineIcon className="size-4" />
+            ) : (
+              <ArrowDownToLineIcon className="size-4" />
+            )}
+          </Toggle>
+        }
+      />
+      <TooltipPopup side="bottom">{label}</TooltipPopup>
+    </Tooltip>
+  );
+});
+
 /** The thread panel toggle on a header whose right side the inline right panel covers. */
 export function ThreadPanelHeaderControl(props: PanelLayoutControlsProps) {
   const mobileSidebarSheetMounted = useMobileSidebarSheetMounted();
@@ -196,6 +232,8 @@ export function WorkspaceTitlebarControls(props: {
   readonly animationsActive: boolean;
   readonly maximized: boolean;
   readonly onToggleMaximized: () => void;
+  /** Shown with the maximize toggle while the panel is open. */
+  readonly dockControl?: ReactNode;
   readonly children: ReactNode;
 }) {
   const { rightPanelOpen, maximized } = props;
@@ -245,6 +283,7 @@ export function WorkspaceTitlebarControls(props: {
           )}
           inert={!props.rightPanelOpen}
         >
+          {props.dockControl}
           <RightPanelMaximizeControl
             maximized={props.maximized}
             onToggle={props.onToggleMaximized}

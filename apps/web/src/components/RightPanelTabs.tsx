@@ -106,6 +106,7 @@ import { resolvePullRequestState } from "./pullRequest/pullRequestPresentation";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
 import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
+import type { RightPanelDock } from "../rightPanelDock";
 
 export interface RightPanelTabsProps {
   mode: PreviewPanelMode;
@@ -116,6 +117,8 @@ export interface RightPanelTabsProps {
   widthStorageKey?: string;
   defaultWidth?: number;
   inlineSize?: PreviewPanelInlineSize;
+  /** Inline only. Below the chat, the panel leaves the title bar to the chat header. */
+  dock?: RightPanelDock;
   layoutControls?: ReactNode;
   surfaces: readonly RightPanelSurface[];
   environmentId: EnvironmentId | null;
@@ -1026,7 +1029,8 @@ function RightPanelTab(
 
 export function RightPanelTabs(props: RightPanelTabsProps) {
   const focusedSurface = props.surfaces.find((surface) => surface.id === props.activeSurfaceId);
-  const ownsDesktopTitleBar = isElectron && props.mode === "inline";
+  const dockedBelow = props.mode === "inline" && props.dock === "bottom";
+  const ownsDesktopTitleBar = isElectron && props.mode === "inline" && !dockedBelow;
   const browserProfiles = useBrowserDefaults().profiles;
   const { resolvedTheme } = useTheme();
   const tabListRef = useRef<HTMLDivElement>(null);
@@ -1333,6 +1337,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       {...(props.widthStorageKey !== undefined ? { widthStorageKey: props.widthStorageKey } : {})}
       {...(props.defaultWidth !== undefined ? { defaultWidth: props.defaultWidth } : {})}
       {...(props.inlineSize ? { inlineSize: props.inlineSize } : {})}
+      {...(props.dock ? { dock: props.dock } : {})}
       onMouseDown={preventThumbButtonFocus}
       onMouseUp={(event) =>
         takeThumbButtonNavigation(
@@ -1344,7 +1349,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       <div
         className={cn(
           "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center gap-1 pl-2",
-          props.mode === "inline" && !props.layoutControls ? "pr-28" : "pr-3",
+          props.mode === "inline" && !dockedBelow && !props.layoutControls ? "pr-36" : "pr-3",
           ownsDesktopTitleBar && "drag-region",
           ownsDesktopTitleBar && "wco:pr-(--workspace-native-controls-inset)",
           props.mode === "inline" && props.maximized && COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,

@@ -1,8 +1,10 @@
 import { usePreviewPanelInlineSize } from "../../hooks/usePreviewPanelInlineSize";
 import { RightPanelSheet } from "../RightPanelSheet";
 import { RightPanelTabs, type RightPanelTabsProps } from "../RightPanelTabs";
+import type { RightPanelDock } from "../../rightPanelDock";
 
 type ChatRightPanelProps = Omit<RightPanelTabsProps, "mode" | "inlineSize" | "maximized"> & {
+  readonly dock: RightPanelDock;
   readonly sheet: boolean;
   readonly maximized: boolean;
   readonly workspaceLayoutElement: HTMLElement | null;
@@ -25,14 +27,24 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
     onCloseSheet,
     maximized,
     layoutControls,
+    dock,
     ...tabs
   } = props;
   const inlineSize = usePreviewPanelInlineSize({
     container: workspaceLayoutElement,
     widthStorageKey,
+    dock,
   });
   if (!sheet) {
-    return <RightPanelTabs {...tabs} mode="inline" maximized={maximized} inlineSize={inlineSize} />;
+    return (
+      <RightPanelTabs
+        {...tabs}
+        mode="inline"
+        dock={dock}
+        maximized={maximized}
+        inlineSize={inlineSize}
+      />
+    );
   }
   return (
     <RightPanelSheet

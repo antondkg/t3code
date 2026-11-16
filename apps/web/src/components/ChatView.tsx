@@ -171,6 +171,7 @@ import { subscribeSnapShotComposerFocus } from "../lib/desktopSnapShot";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { FileMetadataThreadProvider } from "../hooks/FileMetadataThreadProvider";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
+import { useRightPanelDock } from "../rightPanelDock";
 import { PopoverCreateHandle } from "./ui/popover";
 import {
   selectActiveRightPanel,
@@ -309,6 +310,7 @@ import { useOpenFavoriteEditorShortcut } from "./chat/OpenInPickerShortcut";
 import {
   PanelLayoutControls,
   type PanelLayoutControlsProps,
+  RightPanelDockControl,
   RightPanelMaximizeControl,
   ThreadPanelHeaderControl,
   WorkspaceTitlebarControls,
@@ -1081,6 +1083,7 @@ export default function ChatView(props: ChatViewProps) {
     selectThreadRightPanelState(state.byThreadKey, activeThreadRef),
   );
   const shouldUsePlanSidebarSheet = prefersPlanSidebarSheet && rightPanelState.maximized !== true;
+  const [rightPanelDock, setRightPanelDock] = useRightPanelDock();
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
@@ -1127,7 +1130,11 @@ export default function ChatView(props: ChatViewProps) {
   // An embedded side chat has no panel; a stale maximized flag would hide its own column.
   const rightPanelMaximized =
     !embedded && canMaximizeRightPanel && rightPanelState.maximized === true;
-  const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUsePlanSidebarSheet;
+  // Maximized, a panel docked below fills the workspace exactly as a right-docked one does.
+  const panelDockedBelow =
+    rightPanelDock === "bottom" && !shouldUsePlanSidebarSheet && !rightPanelMaximized;
+  const inlineRightPanelOwnsTitleBar =
+    rightPanelOpen && !shouldUsePlanSidebarSheet && !panelDockedBelow;
   const [threadPanelPopoverHandle] = useState(PopoverCreateHandle);
   const [chatCanvasStore] = useState(createChatCanvasStore);
 
@@ -3323,6 +3330,14 @@ export default function ChatView(props: ChatViewProps) {
       animationsActive={panelAnimationsActive}
       maximized={rightPanelMaximized}
       onToggleMaximized={toggleRightPanelMaximizedStable}
+      dockControl={
+        shouldUsePlanSidebarSheet ? null : (
+          <RightPanelDockControl
+            dock={rightPanelDock}
+            onToggle={() => setRightPanelDock(rightPanelDock === "bottom" ? "right" : "bottom")}
+          />
+        )
+      }
     >
       {panelToggleControls}
     </WorkspaceTitlebarControls>
@@ -3336,7 +3351,10 @@ export default function ChatView(props: ChatViewProps) {
   const content = (
     <div
       ref={setWorkspaceLayoutElement}
-      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+      className={cn(
+        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
+        panelDockedBelow && rightPanelPresent && "flex-col",
+      )}
     >
       {embedded ? null : (
         <DeviceSetupDialogHost
@@ -3391,6 +3409,7 @@ export default function ChatView(props: ChatViewProps) {
               parentThreadLink={headerParentThreadLink}
               onOpenThread={onOpenRelatedThreadStable}
               rightPanelOpen={inlineRightPanelOwnsTitleBar}
+              panelDockedBelow={panelDockedBelow && rightPanelOpen}
               onNewThreadInProject={handleNewThreadInActiveProjectStable}
               {...(activeDraftLogicalProjectKey
                 ? { onOpenProjectSettings: handleOpenDraftProjectSettingsStable }
@@ -4001,6 +4020,7 @@ export default function ChatView(props: ChatViewProps) {
       {rightPanelPresent && activeThreadRef && !embedded ? (
         <ChatRightPanel
           sheet={shouldUsePlanSidebarSheet}
+          dock={panelDockedBelow ? "bottom" : "right"}
           workspaceLayoutElement={workspaceLayoutElement}
           widthStorageKey={`t3code:preview-panel-width:${activeThreadKey}`}
           sheetAnimationDurationMs={panelAnimationsActive ? panelAnimationDurationMs : 0}

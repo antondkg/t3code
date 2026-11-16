@@ -55,6 +55,8 @@ interface ChatHeaderProps {
   parentThreadLink: { threadId: ThreadId; title: string } | null;
   onOpenThread: (threadId: ThreadId) => void;
   rightPanelOpen: boolean;
+  /** A panel docked below leaves all of its title bar controls on this header. */
+  panelDockedBelow?: boolean;
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
   onFindInThread?: ((threadRef: ScopedThreadRef) => void) | undefined;
@@ -80,6 +82,7 @@ export const ChatHeader = memo(function ChatHeader({
   parentThreadLink,
   onOpenThread,
   rightPanelOpen,
+  panelDockedBelow = false,
   onNewThreadInProject,
   onOpenProjectSettings,
   onFindInThread,
@@ -252,7 +255,7 @@ export const ChatHeader = memo(function ChatHeader({
       ref={breadcrumbContainerRef}
       className={cn(
         "flex min-w-0 flex-1 items-center gap-2 sm:gap-3",
-        rightPanelOpen ? "pr-10" : "pr-24",
+        rightPanelOpen ? "pr-10" : panelDockedBelow ? "pr-40" : "pr-24",
       )}
       onContextMenu={handleHeaderContextMenu}
     >

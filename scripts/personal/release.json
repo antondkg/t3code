@@ -40,6 +40,12 @@
       "head": null,
       "summary": "The sidebar's Working shelf lists threads an agent is running first, then a Waiting divider over blocked and idle ones.",
       "retireWhen": "Upstream separates working from waiting threads in the sidebar."
+    },
+    {
+      "pullRequest": null,
+      "head": null,
+      "summary": "The side panel can dock below the chat instead of to its right, with its own resizable height, from a toggle beside Maximize.",
+      "retireWhen": "Upstream lets the right panel dock below the chat."
     }
   ],
   "linuxRuntimeSha256": "cd2a3a82479d4a21e27050b138a7569d601a91a70d4a98c183df2881ef0e6eb0",
