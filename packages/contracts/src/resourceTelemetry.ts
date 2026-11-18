@@ -12,6 +12,15 @@ export const HostResourcesSnapshot = Schema.Struct({
   cpuCount: NonNegativeInt,
   availableMemoryBytes: NonNegativeInt,
   totalMemoryBytes: NonNegativeInt,
+  memoryHighBytes: Schema.optionalKey(Schema.NullOr(NonNegativeInt)),
+  memoryPressure: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        someAvg10: Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+        fullAvg10: Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+      }),
+    ),
+  ),
 });
 export type HostResourcesSnapshot = typeof HostResourcesSnapshot.Type;
 

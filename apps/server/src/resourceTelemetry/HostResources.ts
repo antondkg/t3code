@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { readLinuxMemory } from "./linuxMemory.ts";
 
 export class HostResources extends Context.Service<
   HostResources,
@@ -138,14 +139,10 @@ const make = Effect.fn("makeHostResources")(function* () {
       cpuUtilization = idle === null ? null : Math.min(1, Math.max(0, 1 - idle / capacity));
     }
 
-    let totalMemoryBytes = NodeOS.totalmem();
+    const totalMemoryBytes = NodeOS.totalmem();
     // On Windows libuv returns GlobalMemoryStatusEx.ullAvailPhys, including standby memory.
     let availableMemoryBytes = NodeOS.freemem();
-    if (platform === "linux") {
-      const meminfo = yield* readFile("/proc/meminfo");
-      const available = /^MemAvailable:\s+(\d+)\s+kB$/m.exec(meminfo)?.[1];
-      if (available) availableMemoryBytes = Number(available) * 1024;
-    } else if (platform === "darwin") {
+    if (platform === "darwin") {
       const output = yield* spawner
         .string(ChildProcess.make("/usr/bin/vm_stat", [], { stdin: "ignore", stderr: "ignore" }))
         .pipe(
@@ -154,30 +151,20 @@ const make = Effect.fn("makeHostResources")(function* () {
         );
       availableMemoryBytes = darwinAvailableMemory(output) ?? availableMemoryBytes;
     }
-    const memoryMax = cgroup
-      ? cgroupNumber(yield* readFile(`${cgroup}/memory.max`), /^(\d+)$/m)
-      : null;
-    const memoryCurrent =
-      memoryMax === null
-        ? null
-        : cgroupNumber(yield* readFile(`${cgroup}/memory.current`), /^(\d+)$/m);
-    // Without usage, a capped total would read as a near-empty cgroup; keep host values instead.
-    if (memoryMax !== null && memoryCurrent !== null) {
-      totalMemoryBytes = Math.min(totalMemoryBytes, memoryMax);
-      // inactive_file is page cache the kernel reclaims before hitting memory.max.
-      const stat = yield* readFile(`${cgroup}/memory.stat`);
-      const reclaimable = cgroupNumber(stat, /^inactive_file (\d+)$/m) ?? 0;
-      availableMemoryBytes = Math.min(
-        availableMemoryBytes,
-        memoryMax - (memoryCurrent - reclaimable),
-      );
-    }
+    const memory =
+      platform === "linux"
+        ? yield* readLinuxMemory(cgroupPath, totalMemoryBytes, availableMemoryBytes)
+        : {
+            totalMemoryBytes,
+            availableMemoryBytes: Math.min(totalMemoryBytes, Math.max(0, availableMemoryBytes)),
+            memoryHighBytes: null,
+            memoryPressure: null,
+          };
     return {
       sampledAt: DateTime.toEpochMillis(yield* DateTime.now),
       cpuUtilization,
       cpuCount,
-      availableMemoryBytes: Math.min(totalMemoryBytes, Math.max(0, availableMemoryBytes)),
-      totalMemoryBytes,
+      ...memory,
     };
   });
 

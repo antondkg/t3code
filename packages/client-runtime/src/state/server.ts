@@ -1481,6 +1481,7 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:host-resources",
       idleTtlMs: 0,
       staleTimeMs: 5_000,
+      refreshIntervalMs: 10_000,
       execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetHostResources>) =>
         request(WS_METHODS.serverGetHostResources, input).pipe(Effect.timeout("5 seconds")),
     }),

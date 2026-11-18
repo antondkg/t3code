@@ -46,6 +46,12 @@
       "head": null,
       "summary": "The side panel can dock below the chat instead of to its right, with its own resizable height, from a toggle beside Maximize.",
       "retireWhen": "Upstream lets the right panel dock below the chat."
+    },
+    {
+      "pullRequest": null,
+      "head": null,
+      "summary": "The sidebar footer shows vallor-dev memory use and pressure through host telemetry, including inherited shared cgroup limits.",
+      "retireWhen": "Upstream shows remote host memory use and pressure in the sidebar."
     }
   ],
   "linuxRuntimeSha256": "35718dd898b5a9eff329ad4ed14ceac5ec019d48783c5d4d1d1201acc4f84e9c",

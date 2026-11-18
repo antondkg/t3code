@@ -151,6 +151,34 @@ describe("HostResources.layer", () => {
     ),
   );
 
+  it.effect("includes sibling workloads, inherited limits and pressure from the parent slice", () =>
+    Effect.gen(function* () {
+      setup();
+      const snapshot = yield* read;
+
+      assert.strictEqual(snapshot.totalMemoryBytes, 2 * GiB);
+      assert.strictEqual(snapshot.availableMemoryBytes, 500 * MiB);
+      assert.strictEqual(snapshot.memoryHighBytes, 1500 * MiB);
+      assert.deepStrictEqual(snapshot.memoryPressure, { someAvg10: 12.5, fullAvg10: 3.25 });
+    }).pipe(
+      Effect.provide(
+        linuxHost({
+          ...unlimitedCgroup,
+          "/sys/fs/cgroup/t3.slice/memory.max": [`${2 * GiB}\n`],
+          "/sys/fs/cgroup/t3.slice/memory.high": [`${1500 * MiB}\n`],
+          "/sys/fs/cgroup/t3.slice/memory.current": [`${1648 * MiB}\n`],
+          "/sys/fs/cgroup/t3.slice/memory.stat": [`inactive_file ${100 * MiB}\n`],
+          "/sys/fs/cgroup/t3.slice/memory.pressure": [
+            "some avg10=12.50 avg60=2.00 avg300=1.00 total=100\nfull avg10=3.25 avg60=1.00 avg300=0.50 total=50\n",
+          ],
+          [`${cgroup}/memory.pressure`]: [
+            "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+          ],
+        }),
+      ),
+    ),
+  );
+
   it.effect("samples the CPUs the server is pinned to by id, not by os.cpus() index", () =>
     Effect.gen(function* () {
       setup();
@@ -185,6 +213,8 @@ describe("HostResources.layer", () => {
 
       assert.strictEqual(snapshot.totalMemoryBytes, 4 * GiB);
       assert.strictEqual(snapshot.availableMemoryBytes, 2 * GiB);
+      assert.strictEqual(snapshot.memoryHighBytes, null);
+      assert.strictEqual(snapshot.memoryPressure, null);
     }).pipe(
       Effect.provide(
         linuxHost({
