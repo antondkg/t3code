@@ -2,6 +2,7 @@ import { OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
+import * as ThreadWidgets from "../../../htmlRender/ThreadWidgets.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { loadCaller } from "../../threadAccess.ts";
@@ -48,6 +49,55 @@ const pageSource = Effect.fn("HtmlToolkit.pageSource")(function* (input: {
 });
 
 const handlers = {
+  thread_widget: McpToolAccess.actsAsCaller((input) =>
+    Effect.gen(function* () {
+      const scope = yield* McpInvocationContext.McpInvocationContext;
+      const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "thread_widget");
+      const widgets = yield* ThreadWidgets.ThreadWidgets;
+      if (input.action === "list") {
+        return {
+          widgets: yield* widgets.list(thread.threadId).pipe(
+            Effect.mapError(
+              () =>
+                new OrchestratorMcpFailure({
+                  code: "orchestration_error",
+                  message: "Could not read widgets.",
+                }),
+            ),
+          ),
+        };
+      }
+      if (!input.id) {
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: "Pass a stable widget id.",
+        });
+      }
+      const source =
+        input.html !== undefined || input.path !== undefined ? yield* pageSource(input) : {};
+      return {
+        widgets: yield* widgets
+          .update({
+            ...source,
+            threadId: thread.threadId,
+            id: input.id,
+            title: input.title,
+            height: input.height,
+            data: input.data,
+            remove: input.action === "remove",
+          })
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new OrchestratorMcpFailure({
+                  code: "invalid_request",
+                  message: error.message,
+                }),
+            ),
+          ),
+      };
+    }),
+  ),
   // Local-file access limits this host browser to T3-launched agents.
   html_preview: McpToolAccess.readsAsCaller((input) =>
     Effect.gen(function* () {
@@ -91,4 +141,5 @@ export const layerPreview = McpToolAccess.toLayer(HtmlPreviewToolkit, {
 
 export const layerRender = McpToolAccess.toLayer(HtmlRenderToolkit, {
   html_render: handlers.html_render,
+  thread_widget: handlers.thread_widget,
 });

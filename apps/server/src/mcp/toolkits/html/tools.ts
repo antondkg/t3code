@@ -1,4 +1,9 @@
-import { OrchestratorMcpFailure } from "@t3tools/contracts";
+import {
+  OrchestratorMcpFailure,
+  ThreadWidget,
+  ThreadWidgetId,
+  ThreadWidgetData,
+} from "@t3tools/contracts";
 import {
   HTML_RENDER_COLUMN_WIDTH,
   HTML_RENDER_LAYOUT_GUIDE,
@@ -13,6 +18,7 @@ import * as Schema from "effect/Schema";
 import { McpSchema, Tool, Toolkit } from "effect/ai";
 
 import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
+import * as ThreadWidgets from "../../../htmlRender/ThreadWidgets.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
@@ -113,8 +119,35 @@ const HtmlRenderTool = Tool.make(HTML_RENDER_TOOL_NAME, {
   .annotate(Tool.OpenWorld, true)
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
+const ThreadWidgetTool = Tool.make("thread_widget", {
+  description: `Create or update a persistent live HTML widget in this thread's details area. Use a short stable id, such as "progress"; reusing it updates the existing widget. First call: id, title, html (or path), optional data and height. Later send only id and data for live updates without reloading the page, or html/path to replace it. In HTML, window.t3Widget.onUpdate(data => { /* update DOM */ }) receives initial data and every update; window.t3Widget.data holds the latest value. Data replaces the previous JSON value. Use action:"list" to recover ids after compaction, action:"remove" with id to delete one. Widgets remain visible between turns and after reconnect. ${PAGE_RULES} ${HTML_RENDER_THEME_GUIDE}`,
+  parameters: Schema.Struct({
+    action: Schema.optional(Schema.Literals(["upsert", "list", "remove"])),
+    id: Schema.optional(ThreadWidgetId),
+    title: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))),
+    html: Schema.optional(Html),
+    path: Schema.optional(HtmlPath),
+    data: Schema.optional(ThreadWidgetData),
+    height: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 80, maximum: 2000 }))),
+  }),
+  success: Schema.Struct({ widgets: Schema.Array(ThreadWidget) }),
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies: [
+    McpInvocationContext.McpInvocationContext,
+    ThreadWidgets.ThreadWidgets,
+    ThreadManagementService.ThreadManagementService,
+  ],
+})
+  .annotate(Tool.Title, "Update thread widget")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, true)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
+
 export const HtmlPreviewToolkit = Toolkit.make(HtmlPreviewTool);
 
-export const HtmlRenderToolkit = Toolkit.make(HtmlRenderTool);
+export const HtmlRenderToolkit = Toolkit.make(HtmlRenderTool, ThreadWidgetTool);
 
-export const HtmlToolkit = Toolkit.make(HtmlPreviewTool, HtmlRenderTool);
+export const HtmlToolkit = Toolkit.make(HtmlPreviewTool, HtmlRenderTool, ThreadWidgetTool);

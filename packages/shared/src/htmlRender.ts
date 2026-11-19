@@ -5,6 +5,8 @@ import {
   type ThemeColors,
 } from "./themePalettes.ts";
 import { EVENT_CODE_SHORTCUT_KEYS } from "./keybindings.ts";
+import { THREAD_WIDGET_BOOTSTRAP } from "./threadWidget.ts";
+export { threadWidgetDataMessage } from "./threadWidget.ts";
 
 export const HTML_RENDER_TOOL_NAME = "html_render";
 export const HTML_RENDER_MIN_HEIGHT = 80;
@@ -415,7 +417,7 @@ function bootstrapMarkup(markup: string): string {
       ? ""
       : '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<style id="t3-theme">${defaultCss}</style>`,
-    `<script>${BOOTSTRAP_SCRIPT}</script>`,
+    `<script>${BOOTSTRAP_SCRIPT}${THREAD_WIDGET_BOOTSTRAP}</script>`,
   ].join("");
 }
 

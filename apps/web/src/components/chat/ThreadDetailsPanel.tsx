@@ -21,6 +21,7 @@ import ProjectScriptsControl, {
 } from "../ProjectScriptsControl";
 import { memo, useState, type ComponentProps } from "react";
 import { ThreadDetailsCard } from "./ThreadDetailsCard";
+import { ThreadWidgetsPanel } from "./ThreadWidgetsPanel";
 import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
@@ -300,6 +301,9 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                 />
               ) : null}
 
+              {!props.draftId && visible.widgets ? (
+                <ThreadWidgetsPanel environmentId={props.environmentId} threadId={props.threadId} />
+              ) : null}
               {visible.usage ? <ThreadDetailsUsage {...props.usage} /> : null}
 
               {visible.context && props.usage.contextWindow ? (

@@ -31,6 +31,7 @@ import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as DeviceService from "../device/DeviceService.ts";
 import * as HtmlRender from "../htmlRender/HtmlRender.ts";
+import * as ThreadWidgets from "../htmlRender/ThreadWidgets.ts";
 import * as ThreadCommandExecutor from "../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as PullRequestWatchService from "../pullRequest/PullRequestWatchService.ts";
@@ -1236,7 +1237,7 @@ const imageToolRegistration = <Tools extends Record<string, Tool.Any>, A, E, R, 
 export const layerHtmlToolkit = Layer.mergeAll(
   toolkitRegistration(HtmlRenderToolkit, HtmlHandlers.layerRender),
   imageToolRegistration(registerHtmlPreview(), HtmlHandlers.layerPreview),
-).pipe(Layer.provide(HtmlRender.layer));
+).pipe(Layer.provide(ThreadWidgets.layer), Layer.provide(HtmlRender.layer));
 
 const layerPreviewStandardToolkitRegistration = toolkitRegistration(
   PreviewStandardToolkit,

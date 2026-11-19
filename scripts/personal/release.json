@@ -52,6 +52,12 @@
       "head": null,
       "summary": "The sidebar footer shows vallor-dev memory use and pressure through host telemetry, including inherited shared cgroup limits.",
       "retireWhen": "Upstream shows remote host memory use and pressure in the sidebar."
+    },
+    {
+      "pullRequest": null,
+      "head": null,
+      "summary": "Agents create and update persistent live HTML widgets in thread details through thread_widget, with in-place JSON data updates.",
+      "retireWhen": "Upstream supports persistent live widgets in thread details with agent tools."
     }
   ],
   "linuxRuntimeSha256": "35718dd898b5a9eff329ad4ed14ceac5ec019d48783c5d4d1d1201acc4f84e9c",

@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { threadWidgetDataMessage } from "@t3tools/shared/htmlRender";
 import {
   type KeybindingCommand,
   type KeybindingShortcut,
@@ -179,6 +180,7 @@ function FileDocument(props: { readonly src: string; readonly title: string }) {
 export function HtmlRenderDocument(props: {
   readonly src: string;
   readonly title: string;
+  readonly widgetData?: unknown;
   readonly className?: string;
   readonly threadRef?: ScopedThreadRef | undefined;
   readonly onContentHeight?: (height: number) => void;
@@ -195,6 +197,13 @@ export function HtmlRenderDocument(props: {
   };
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- posts the current theme to the sandboxed iframe's window
   useEffect(postTheme, [theme]);
+  const postWidgetData = () => {
+    if (props.widgetData !== undefined) {
+      frameRef.current?.contentWindow?.postMessage(threadWidgetDataMessage(props.widgetData), "*");
+    }
+  };
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- sends live widget data to the sandbox without replacing its document
+  useEffect(postWidgetData, [props.widgetData]);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const environmentKeybindings = useAtomValue(
     serverEnvironment.configValueAtom(props.threadRef?.environmentId ?? null),
@@ -332,6 +341,7 @@ export function HtmlRenderDocument(props: {
           // Covers a theme change that landed while the page was loading.
           postTheme();
           postShortcuts();
+          postWidgetData();
         }}
         // Match the blank document's scheme to avoid dark-mode white flashes, then follow the app after load.
         className={cn("border-0 scheme-light", props.className)}

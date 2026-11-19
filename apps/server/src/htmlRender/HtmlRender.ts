@@ -152,6 +152,7 @@ export class HtmlRender extends Context.Service<
         readonly threadId: ThreadId;
         readonly title: string;
         readonly height: number;
+        readonly placement?: "thread-details";
       },
     ) => Effect.Effect<
       HtmlRenderReference,
@@ -503,6 +504,7 @@ const make = Effect.gen(function* () {
       readonly threadId: ThreadId;
       readonly title: string;
       readonly height: number;
+      readonly placement?: "thread-details";
     },
   ) {
     const source = yield* readSource(input);
@@ -527,12 +529,17 @@ const make = Effect.gen(function* () {
     return yield* fileSystem.writeFileString(filePath, html).pipe(
       Effect.mapError((cause) => new HtmlRenderStoreError({ cause })),
       Effect.uninterruptible,
-      Effect.andThen(measure(html)),
+      Effect.andThen(
+        input.placement === "thread-details"
+          ? Effect.succeed<HtmlRenderReference["heights"]>(undefined)
+          : measure(html),
+      ),
       Effect.andThen((heights) => {
         const reference: HtmlRenderReference = {
           ...baseReference,
           ...(heights === undefined ? {} : { heights }),
         };
+        if (input.placement === "thread-details") return Effect.succeed(reference);
         return mcpSessions
           .recordHtmlRender(
             input.threadId,

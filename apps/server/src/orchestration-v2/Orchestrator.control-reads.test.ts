@@ -76,6 +76,77 @@ const layerTest = Layer.mergeAll(
   ),
 );
 
+it.effect(
+  "persists independent live widgets and updates data without replacing their documents",
+  () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const threadId = ThreadId.make("thread:widgets");
+      const progressAttachment = "thread-widgets-00000000-0000-4000-8000-000000000001-html";
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("create-widgets"),
+        threadId,
+        projectId: ProjectId.make("project:widgets"),
+        title: "Widgets",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+      yield* Effect.forEach(
+        ["progress", "checks"],
+        (id) =>
+          orchestrator.dispatch({
+            type: "thread.metadata.update",
+            commandId: CommandId.make(`widget-${id}`),
+            threadId,
+            widget: {
+              id,
+              document: {
+                attachmentId:
+                  id === "progress"
+                    ? progressAttachment
+                    : "thread-widgets-00000000-0000-4000-8000-000000000002-html",
+                title: id,
+                height: 240,
+              },
+              data: { done: 0 },
+            },
+          }),
+        { concurrency: "unbounded" },
+      );
+      yield* orchestrator.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make("widget-progress-update"),
+        threadId,
+        widget: { id: "progress", data: { done: 3 } },
+      });
+      const { thread } = yield* orchestrator.getThreadRecords(threadId, []);
+      assert.strictEqual(thread.widgets?.length, 2);
+      const progress = thread.widgets?.find((widget) => widget.id === "progress");
+      assert.strictEqual(progress?.attachmentId, progressAttachment);
+      assert.deepStrictEqual(progress?.data, { done: 3 });
+      yield* orchestrator.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make("remove-progress"),
+        threadId,
+        widget: { id: "progress", remove: true },
+      });
+      assert.deepStrictEqual(
+        (yield* orchestrator.getThreadRecords(threadId, [])).thread.widgets?.map(
+          (widget) => widget.id,
+        ),
+        ["checks"],
+      );
+      const store = yield* ProjectionStore.ProjectionStoreV2;
+      assert.include(yield* store.getThreadAttachmentIds(threadId), progressAttachment);
+    }).pipe(Effect.provide(layerTest)),
+);
+
 it.effect.each(
   (["provider.switch", "thread.model-selection.set"] as const).flatMap((type) =>
     [

@@ -370,6 +370,7 @@ it.effect("returns an HTML render reference that Codex and Claude tool rows both
           name,
           arguments: {
             path: "/t3-missing-dir/revenue.html",
+            ...(name === "thread_widget" ? { id: "status" } : {}),
             ...(name === "html_render" ? { title: "Revenue", height: 240 } : {}),
           },
         })
@@ -380,7 +381,7 @@ it.effect("returns an HTML render reference that Codex and Claude tool rows both
           Effect.map((result) => (result.isError ? JSON.stringify(result.content) : undefined)),
         );
     const fullAccess = { ...scope, thread: { ...scope.thread!, threadId: fullAccessThreadId } };
-    for (const name of ["html_preview", "html_render"]) {
+    for (const name of ["html_preview", "html_render", "thread_widget"]) {
       expect(yield* byPath(name, scope), name).toContain("only full-access threads");
       expect(yield* byPath(name, fullAccess), name).toContain("not a readable HTML document");
     }
@@ -399,6 +400,7 @@ it.effect("returns an HTML render reference that Codex and Claude tool rows both
         Layer.provide(FetchHttpClient.layer),
         Layer.provide(
           Layer.mock(ThreadManagement.ThreadManagementService)({
+            getThreadRecords: (id) => Effect.succeed({ thread: { id, widgets: [] } } as never),
             getThreadShell: (id) =>
               Effect.succeed({
                 id,

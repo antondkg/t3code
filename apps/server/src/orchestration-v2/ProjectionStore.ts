@@ -101,7 +101,11 @@ import * as SqlClient from "effect/sql/SqlClient";
 import type * as Statement from "effect/sql/Statement";
 
 import { MCP_APP_OUTPUT_KEY } from "@t3tools/shared/mcpApp";
-import { threadHtmlRenderAttachmentIds } from "../attachmentStore.ts";
+import {
+  threadHtmlRenderAttachmentIds,
+  parseThreadSegmentFromAttachmentId,
+  toSafeThreadAttachmentSegment,
+} from "../attachmentStore.ts";
 import { readableSearchText } from "./messageSearchIndex.ts";
 import {
   isFoldableWorkItem,
@@ -6500,6 +6504,13 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           WHERE thread.thread_id = ${threadId}
             AND json_extract(message.value, '$.status') = 'pending'
         `;
+        const widgetFiles = yield* sql<{ id: string }>`
+          SELECT DISTINCT json_extract(widget.value, '$.attachmentId') AS id
+          FROM orchestration_events AS event,
+            json_each(event.payload_json, '$.widgets') AS widget
+          WHERE event.stream_id = ${threadId}
+            AND event.event_type = 'thread.metadata-updated'
+        `;
         return [
           ...new Set([
             ...(yield* unshownRunAttachmentIds(
@@ -6508,6 +6519,13 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               Number.MAX_SAFE_INTEGER,
             )),
             ...guestFiles.map((row) => row.id),
+            ...widgetFiles
+              .map((row) => row.id)
+              .filter(
+                (id) =>
+                  parseThreadSegmentFromAttachmentId(id) ===
+                  toSafeThreadAttachmentSegment(threadId),
+              ),
             ...released.flat(),
           ]),
         ];

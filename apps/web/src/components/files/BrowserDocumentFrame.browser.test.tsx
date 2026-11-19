@@ -14,6 +14,34 @@ const sizeChanged = (height: number) => ({
 });
 
 describe("HtmlRenderDocument", () => {
+  it("delivers initial widget data and live updates without reloading interactive page state", async () => {
+    const reports: unknown[] = [];
+    const onReport = (event: MessageEvent) => {
+      if (event.data?.type === "widget-test") reports.push(event.data);
+    };
+    window.addEventListener("message", onReport);
+    using _reports = { [Symbol.dispose]: () => window.removeEventListener("message", onReport) };
+    const html = injectHtmlRenderBootstrap(`<!doctype html><html><body>
+      <p id="progress">Waiting</p><button id="counter">Clicks: 0</button>
+      <script>var clicks=0,button=document.getElementById("counter");button.onclick=function(){button.textContent="Clicks: "+(++clicks);};window.t3Widget.onUpdate(function(data){var progress=document.getElementById("progress");progress.textContent="Done: "+data.done;parent.postMessage({type:"widget-test",text:progress.textContent,clicks:clicks},"*");});</script>
+      </body></html>`);
+    const src = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    using _url = { [Symbol.dispose]: () => URL.revokeObjectURL(src) };
+    await using screen = await render(
+      <HtmlRenderDocument src={src} title="Live progress" widgetData={{ done: 1 }} />,
+    );
+    const frame = page.frameLocator(screen.getByTitle("Live progress"));
+    await vi.waitFor(() =>
+      expect(reports).toContainEqual({ type: "widget-test", text: "Done: 1", clicks: 0 }),
+    );
+    await frame.getByRole("button", { name: "Clicks: 0" }).click();
+    await screen.rerender(
+      <HtmlRenderDocument src={src} title="Live progress" widgetData={{ done: 2 }} />,
+    );
+    await vi.waitFor(() =>
+      expect(reports).toContainEqual({ type: "widget-test", text: "Done: 2", clicks: 1 }),
+    );
+  });
   it("reports the page's first height and ignores messages from other windows", async () => {
     using pageUrl = (() => {
       const page = `<script>parent.postMessage(${JSON.stringify(sizeChanged(321))}, "*");</script>`;

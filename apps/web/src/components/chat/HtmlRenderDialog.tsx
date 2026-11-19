@@ -16,6 +16,7 @@ import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 export function HtmlRenderDialog(props: {
   readonly src: string;
   readonly htmlRender: HtmlRenderReference;
+  readonly widgetData?: unknown;
   readonly threadRef?: ScopedThreadRef | undefined;
   readonly onClose: () => void;
 }) {
@@ -63,6 +64,7 @@ export function HtmlRenderDialog(props: {
                 <HtmlRenderDocument
                   src={props.src}
                   title={title}
+                  widgetData={props.widgetData}
                   threadRef={props.threadRef}
                   className="block size-full"
                   onContentHeight={setContentHeight}

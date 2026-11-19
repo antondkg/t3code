@@ -1,4 +1,5 @@
 import { OrchestrationMessageContext } from "./composerContext.ts";
+import { MAX_THREAD_WIDGETS, ThreadWidget, ThreadWidgetUpdate } from "./threadWidgets.ts";
 import { withRecordIdTable } from "./orchestrationV2IdTable.ts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -464,6 +465,9 @@ const OrchestrationV2LastTitleRegeneration = Schema.Struct({
 });
 
 export const OrchestrationV2AppThread = Schema.Struct({
+  widgets: Schema.optional(
+    Schema.Array(ThreadWidget).check(Schema.isMaxLength(MAX_THREAD_WIDGETS)),
+  ),
   ...OrchestrationV2CreationFields,
   id: ThreadId,
   projectId: ProjectId,
@@ -3269,6 +3273,7 @@ export const OrchestrationV2Command = Schema.Union([
     type: Schema.Literal("thread.metadata.update"),
     commandId: CommandId,
     threadId: ThreadId,
+    widget: Schema.optional(ThreadWidgetUpdate),
     title: Schema.optional(TrimmedNonEmptyString),
     regenerateTitle: Schema.optional(Schema.Boolean),
     branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),

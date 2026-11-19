@@ -23,6 +23,7 @@ const MIN_URL_LIFE_MS = 5 * 60_000;
 export function HtmlRenderFrame(props: {
   readonly environmentId: EnvironmentId;
   readonly htmlRender: HtmlRenderReference;
+  readonly widgetData?: unknown;
   readonly threadRef: ScopedThreadRef | undefined;
   readonly onFullscreenChange?: (fullscreen: boolean) => void;
 }) {
@@ -73,6 +74,7 @@ export function HtmlRenderFrame(props: {
           <HtmlRenderDocument
             src={src}
             title={title}
+            widgetData={props.widgetData}
             threadRef={props.threadRef}
             className="block size-full"
             onContentHeight={setContentHeight}
@@ -111,6 +113,7 @@ export function HtmlRenderFrame(props: {
             <HtmlRenderDialog
               src={expandedSrc}
               htmlRender={props.htmlRender}
+              widgetData={props.widgetData}
               threadRef={props.threadRef}
               onClose={() => setExpandedSrc(null)}
             />

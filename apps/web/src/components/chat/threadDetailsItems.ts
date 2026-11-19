@@ -3,6 +3,7 @@ import type { ClientSettings } from "@t3tools/contracts";
 // Ids are stored in client settings, so never rename one.
 export const THREAD_DETAILS_ITEMS = [
   { id: "environment", label: "Environment and worktree", defaultVisible: true },
+  { id: "widgets", label: "Live widgets", defaultVisible: true },
   { id: "openIn", label: "Open in editor", defaultVisible: true },
   { id: "scripts", label: "Project scripts", defaultVisible: true },
   { id: "branch", label: "Branch and pull request", defaultVisible: true },
